@@ -10,11 +10,11 @@ pub enum Direction {
 impl Direction {
     pub fn invert_direction(&self) -> Direction {
         match self {
-            &Direction::North => Direction::South,
-            &Direction::East => Direction::West,
-            &Direction::South => Direction::North,
-            &Direction::West => Direction::East,
-            &Direction::Still => Direction::Still,
+            Direction::North => Direction::South,
+            Direction::East => Direction::West,
+            Direction::South => Direction::North,
+            Direction::West => Direction::East,
+            Direction::Still => Direction::Still,
         }
     }
 
@@ -24,11 +24,11 @@ impl Direction {
 
     pub fn get_char_encoding(&self) -> char {
         match self {
-            &Direction::North => 'n',
-            &Direction::East => 'e',
-            &Direction::South => 's',
-            &Direction::West => 'w',
-            &Direction::Still => 'o',
+            Direction::North => 'n',
+            Direction::East => 'e',
+            Direction::South => 's',
+            Direction::West => 'w',
+            Direction::Still => 'o',
         }
     }
 }

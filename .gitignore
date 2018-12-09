@@ -9,3 +9,6 @@ __pycache__/
 *.class
 *.ipr
 *.iws
+/pfx
+/docs
+/replays
