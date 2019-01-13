@@ -41,25 +41,28 @@ impl GradientMap {
         }
     }
 
-    pub fn initialize(&mut self, game: &Game) {
-        self.adjust_cells_for_ship_entities(&game);
-    }
-
     pub fn process_move(&mut self, position: &Position, direction: Direction) {
         // mark direction cell as 0
         let new_ship_position = position.directional_offset(direction);
-        self.at_position(&new_ship_position).value = 0;
+        self.at_position_mut(&new_ship_position).value = 0;
     }
 
+    pub fn at_position_mut(&mut self, position: &Position) -> &mut GradientCell {
+        &mut self.cells[position.y as usize][position.x as usize]
+    }
 
+    pub fn at_position(&self, position: &Position) -> &GradientCell {
+        &self.cells[position.y as usize][position.x as usize]
+    }
 
-    pub fn at_position(&self, position: &Position) -> GradientCell {
-        self.cells[position.y as usize][position.x as usize]
+    pub fn initialize(&mut self, game: &Game) {
+        self.adjust_cells_for_adjacent_ship_entities(&game);
+        self.adjust_for_bullshit_on_my_shipyard(&game);
     }
 
     pub fn suggest_move(&self, ship_position: &Position) -> Direction {
         let mut max_halite: usize = 0;
-        let mut best_direction: Direction;
+        let mut best_direction: Direction = Direction::Still;
 
         for direction in Direction::get_all_cardinals() {
             let current_position = ship_position.directional_offset(direction);
@@ -69,12 +72,12 @@ impl GradientMap {
                 max_halite = *current_value;
                 best_direction = direction;
             }
-        }    
-        
+        }
+
         best_direction
     }
 
-    fn adjust_cells_for_ship_entities(&mut self, game: &Game) {
+    fn adjust_cells_for_adjacent_ship_entities(&mut self, game: &Game) {
         // for each ship
         for (_, ship) in &game.ships {
             //loop over 4-radius and increase ship_count on gradient cell
@@ -95,6 +98,19 @@ impl GradientMap {
         for cell in self.cells.iter_mut().flatten() {
             if cell.nearby_ship_count > 1 {
                 cell.value = cell.value + cell.value * 2;
+            }
+        }
+    }
+
+    fn adjust_for_bullshit_on_my_shipyard(&mut self, game: &Game) {
+        let my_shipyard_position = &game.players[game.my_id.0].shipyard.position;
+        
+        for enemy_player in &game.enemy_players() {
+            for enemy_ship_id in &enemy_player.ship_ids {
+                let ship_position = &game.ships[enemy_ship_id].position;
+                if ship_position == my_shipyard_position {
+                    self.at_position_mut(ship_position).value = 1000;
+                }
             }
         }
     }
