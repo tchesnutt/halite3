@@ -3,11 +3,9 @@ extern crate lazy_static;
 extern crate rand;
 
 use hlt::command::Command;
-use hlt::direction::Direction;
 use hlt::game::Game;
 use hlt::log::Log;
 use hlt::navi::Navi;
-use rand::Rng;
 use rand::SeedableRng;
 use rand::XorShiftRng;
 use std::env;
@@ -78,17 +76,10 @@ fn main() {
             let ship = &game.ships[ship_id];
             let cell = map.at_entity(ship);
 
-            let command = if cell.halite < game.constants.max_halite / 10 || ship.is_full() {
-                let random_direction = Direction::get_all_cardinals()[rng.gen_range(0, 4)];
-                ship.move_ship(random_direction)
-            } else {
-                ship.stay_still()
-            };
+            let move_direction = gradient_map.suggest_move(&ship.position);
+            gradient_map.process_move(&ship.position, move_direction);
 
-            //pick direction for highest gradient cell
-            //compare with current cell and pick best
-            //if move, register move with gradient cell
-
+            let command = ship.move_ship(move_direction);
             command_queue.push(command);
         }
 
