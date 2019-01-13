@@ -65,6 +65,11 @@ fn main() {
         navi.update_frame(&game);
 
         let mut gradient_map = GradientMap::construct(&game.map);
+        Log::log(&format!(
+            "Gradient Map width is {}",
+            gradient_map.cells.len()
+        ));
+
         gradient_map.initialize(&game);
 
         let me = &game.players[game.my_id.0];
@@ -76,7 +81,7 @@ fn main() {
             let ship = &game.ships[ship_id];
             let cell = map.at_entity(ship);
 
-            let move_direction = gradient_map.suggest_move(&ship.position);
+            let move_direction = gradient_map.suggest_move(&ship);
             gradient_map.process_move(&ship.position, move_direction);
 
             let command = ship.move_ship(move_direction);

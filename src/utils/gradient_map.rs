@@ -2,6 +2,8 @@ use hlt::direction::Direction;
 use hlt::game::Game;
 use hlt::game_map::GameMap;
 use hlt::position::Position;
+use hlt::ship::Ship;
+use hlt::log::Log;
 use utils::gradient_cell::GradientCell;
 
 pub struct GradientMap {
@@ -15,23 +17,26 @@ impl GradientMap {
         let height = gm.height;
         let width = gm.width;
 
-        let cells: Vec<Vec<GradientCell>> = Vec::with_capacity(height);
-        for y in 0..cells.len() {
+        let mut cells: Vec<Vec<GradientCell>> = Vec::with_capacity(height);
+        for y in 0..height {
             let mut row: Vec<GradientCell> = Vec::with_capacity(width);
-            for x in 0..row.len() {
+            for x in 0..width {
                 let position = Position {
                     x: x as i32,
                     y: y as i32,
                 };
                 let value: usize = gm.at_position(&position).halite / 4;
                 let nearby_ship_count: i8 = 0;
+                let my_occupy = false;
                 let cell = GradientCell {
                     position,
                     value,
+                    my_occupy,
                     nearby_ship_count,
                 };
                 row.push(cell);
             }
+            cells.push(row);
         }
 
         GradientMap {
@@ -39,12 +44,6 @@ impl GradientMap {
             height,
             cells,
         }
-    }
-
-    pub fn process_move(&mut self, position: &Position, direction: Direction) {
-        // mark direction cell as 0
-        let new_ship_position = position.directional_offset(direction);
-        self.at_position_mut(&new_ship_position).value = 0;
     }
 
     pub fn at_position_mut(&mut self, position: &Position) -> &mut GradientCell {
@@ -55,26 +54,47 @@ impl GradientMap {
         &self.cells[position.y as usize][position.x as usize]
     }
 
-    pub fn initialize(&mut self, game: &Game) {
-        self.adjust_cells_for_adjacent_ship_entities(&game);
-        self.adjust_for_bullshit_on_my_shipyard(&game);
-    }
-
-    pub fn suggest_move(&self, ship_position: &Position) -> Direction {
+    pub fn suggest_move(&mut self, ship: &Ship) -> Direction {
         let mut max_halite: usize = 0;
         let mut best_direction: Direction = Direction::Still;
 
         for direction in Direction::get_all_cardinals() {
-            let current_position = ship_position.directional_offset(direction);
-            //TODO: clean up
-            let current_value = &self.at_position(&current_position).value;
-            if current_value > &max_halite {
-                max_halite = *current_value;
-                best_direction = direction;
+            let current_position = ship.position.directional_offset(direction);
+            let gradient_cell = self.at_position_mut(&current_position);
+
+            let potential_value: usize = match direction {
+                Direction::Still => gradient_cell.value,
+                _ => GradientMap::move_cost(&ship.halite, &gradient_cell.value),
+            };
+
+            if potential_value > max_halite && !gradient_cell.my_occupy {
+                max_halite = gradient_cell.value;
+                best_direction = direction
             }
         }
 
         best_direction
+    }
+
+    fn move_cost(ship_halite: &usize, cell_value: &usize) -> usize {
+        let mut value: usize = 0;
+        if ship_halite / 10 > *cell_value {
+            value = *cell_value;
+        } else {
+            value = cell_value - ship_halite / 10;
+        }
+        return value;
+    }
+
+    pub fn process_move(&mut self, position: &Position, direction: Direction) {
+        // mark direction cell as occupy
+        let new_ship_position = position.directional_offset(direction);
+        self.at_position_mut(&new_ship_position).my_occupy = true;
+    }
+
+    pub fn initialize(&mut self, game: &Game) {
+        self.adjust_cells_for_adjacent_ship_entities(&game);
+        self.adjust_for_bullshit_on_my_shipyard(&game);
     }
 
     fn adjust_cells_for_adjacent_ship_entities(&mut self, game: &Game) {
