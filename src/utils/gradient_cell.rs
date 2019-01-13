@@ -6,5 +6,3 @@ pub struct GradientCell {
     pub my_occupy: bool,
     pub nearby_ship_count: i8,
 }
-
-

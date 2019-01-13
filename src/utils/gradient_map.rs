@@ -13,9 +13,9 @@ pub struct GradientMap {
 }
 
 impl GradientMap {
-    pub fn construct(gm: &GameMap) -> GradientMap {
-        let height = gm.height;
-        let width = gm.width;
+    pub fn construct(game: &Game) -> GradientMap {
+        let height = game.map.height;
+        let width = game.map.width;
 
         let mut cells: Vec<Vec<GradientCell>> = Vec::with_capacity(height);
         for y in 0..height {
@@ -25,7 +25,7 @@ impl GradientMap {
                     x: x as i32,
                     y: y as i32,
                 };
-                let value: usize = gm.at_position(&position).halite / 4;
+                let value: usize = game.map.at_position(&position).halite / 4;
                 let nearby_ship_count: i8 = 0;
                 let my_occupy = false;
                 let cell = GradientCell {
@@ -39,6 +39,14 @@ impl GradientMap {
             cells.push(row);
         }
 
+        //record my ship locations
+        let ship_ids = &game.players[game.my_id.0].ship_ids;
+        for ship_id in ship_ids {
+            let ship = &game.ships[ship_id];
+            cells[ship.position.y as usize][ship.position.x as usize].my_occupy = true;
+        }
+
+
         GradientMap {
             width,
             height,
@@ -47,11 +55,21 @@ impl GradientMap {
     }
 
     pub fn at_position_mut(&mut self, position: &Position) -> &mut GradientCell {
-        &mut self.cells[position.y as usize][position.x as usize]
+        let normalized = self.normalize(position);
+        &mut self.cells[normalized.y as usize][normalized.x as usize]
     }
 
     pub fn at_position(&self, position: &Position) -> &GradientCell {
-        &self.cells[position.y as usize][position.x as usize]
+        let normalized = self.normalize(position);
+        &self.cells[normalized.y as usize][normalized.x as usize]
+    }
+
+    pub fn normalize(&self, position: &Position) -> Position {
+        let width = self.width as i32;
+        let height = self.height as i32;
+        let x = ((position.x % width) + width) % width;
+        let y = ((position.y % height) + height) % height;
+        Position { x, y }
     }
 
     pub fn suggest_move(&mut self, ship: &Ship) -> Direction {
@@ -68,48 +86,53 @@ impl GradientMap {
             };
 
             if potential_value > max_halite && !gradient_cell.my_occupy {
-                max_halite = gradient_cell.value;
-                best_direction = direction
+                max_halite = potential_value;
+                best_direction = direction;
             }
         }
 
         best_direction
     }
 
-    fn move_cost(ship_halite: &usize, cell_value: &usize) -> usize {
+    fn move_cost(ship_halite: &usize, potential_cell_value: &usize) -> usize {
         let mut value: usize = 0;
-        if ship_halite / 10 > *cell_value {
-            value = *cell_value;
+        if ship_halite / 10 > *potential_cell_value {
+            value = 0;
         } else {
-            value = cell_value - ship_halite / 10;
+            value = potential_cell_value - ship_halite / 10;
         }
         return value;
     }
 
-    pub fn process_move(&mut self, position: &Position, direction: Direction) {
+    pub fn process_move(&mut self, old_position: &Position, direction: Direction) {
         // mark direction cell as occupy
-        let new_ship_position = position.directional_offset(direction);
-        self.at_position_mut(&new_ship_position).my_occupy = true;
+        let new_position = old_position.directional_offset(direction);
+        self.at_position_mut(&new_position).my_occupy = true;
+        self.at_position_mut(&old_position).my_occupy = false;
     }
 
     pub fn initialize(&mut self, game: &Game) {
-        self.adjust_cells_for_adjacent_ship_entities(&game);
+        //self.adjust_cells_for_adjacent_ship_entities(&game);
         self.adjust_for_bullshit_on_my_shipyard(&game);
     }
 
     fn adjust_cells_for_adjacent_ship_entities(&mut self, game: &Game) {
         // for each ship
-        for (_, ship) in &game.ships {
-            //loop over 4-radius and increase ship_count on gradient cell
-            for j in -4..4 {
-                for i in -4..4 {
-                    let current_position = Position {
-                        x: ship.position.x + i as i32,
-                        y: ship.position.y + j as i32,
-                    };
+        for enemy_player in &game.enemy_players(){
+            for enemy_ship_id in &enemy_player.ship_ids {
+                let ship = &game.ships[enemy_ship_id];
+                //loop over 4-radius and increase ship_count on gradient cell
+            
+                for j in -4..4 {
+                    for i in -4..4 {
+                        let current_position = Position {
+                            x: ship.position.x + i as i32,
+                            y: ship.position.y + j as i32,
+                        };
 
-                    self.cells[current_position.y as usize][current_position.x as usize]
-                        .nearby_ship_count += 1;
+                        self.cells[current_position.y as usize][current_position.x as usize]
+                            .nearby_ship_count += 1;
+                    }
                 }
             }
         }

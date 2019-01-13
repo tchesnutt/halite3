@@ -50,10 +50,9 @@ fn main() {
 
     let mut game = Game::new();
     let mut navi = Navi::new(game.map.width, game.map.height);
-    // At this point "game" variable is populated with initial map data.
-    // This is a good place to do computationally expensive start-up pre-processing.
-    // As soon as you call "ready" function below, the 2 second per turn timer will start.
-    Game::ready("MyRustBot");
+
+
+    Game::ready("mellow root");
 
     Log::log(&format!(
         "Successfully created bot! My Player ID is {}. Bot rng seed is {}.",
@@ -64,11 +63,7 @@ fn main() {
         game.update_frame();
         navi.update_frame(&game);
 
-        let mut gradient_map = GradientMap::construct(&game.map);
-        Log::log(&format!(
-            "Gradient Map width is {}",
-            gradient_map.cells.len()
-        ));
+        let mut gradient_map = GradientMap::construct(&game);
 
         gradient_map.initialize(&game);
 
@@ -83,6 +78,11 @@ fn main() {
 
             let move_direction = gradient_map.suggest_move(&ship);
             gradient_map.process_move(&ship.position, move_direction);
+            Log::log(&format!(
+                "ShipID {} goes {}",
+                ship_id.0,
+                move_direction.get_char_encoding()
+            ));
 
             let command = ship.move_ship(move_direction);
             command_queue.push(command);
@@ -93,6 +93,22 @@ fn main() {
             && navi.is_safe(&me.shipyard.position)
         {
             command_queue.push(me.shipyard.spawn());
+        }
+
+        for row in gradient_map.cells.iter() {
+            let value_vec: Vec<usize> = row.iter().map(|x| x.value).collect();
+            Log::log(&format!(
+                "{:?}",
+                value_vec
+            ));
+        }
+
+        for row in gradient_map.cells.iter() {
+            let value_vec: Vec<bool> = row.iter().map(|x| x.my_occupy).collect();
+            Log::log(&format!(
+                "{:?}",
+                value_vec
+            ));
         }
 
         Game::end_turn(&command_queue);
