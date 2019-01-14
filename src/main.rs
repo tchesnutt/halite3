@@ -6,15 +6,14 @@ use hlt::command::Command;
 use hlt::game::Game;
 use hlt::log::Log;
 use hlt::navi::Navi;
+use hlt::gradient_map::GradientMap;
 use rand::SeedableRng;
 use rand::XorShiftRng;
 use std::env;
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
-use utils::gradient_map::GradientMap;
 
 mod hlt;
-mod utils;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -65,18 +64,32 @@ fn main() {
 
         let mut gradient_map = GradientMap::construct(&game);
 
+        // for row in gradient_map.cells.iter() {
+        //     let value_vec: Vec<usize> = row.iter().map(|x| x.value).collect();
+        //     Log::log(&format!(
+        //         "{:?}",
+        //         value_vec
+        //     ));
+        // }
+
+        // for row in gradient_map.cells.iter() {
+        //     let value_vec: Vec<bool> = row.iter().map(|x| x.my_occupy).collect();
+        //     Log::log(&format!(
+        //         "{:?}",
+        //         value_vec
+        //     ));
+        // }
+
         gradient_map.initialize(&game);
 
         let me = &game.players[game.my_id.0];
-        let map = &mut game.map;
 
         let mut command_queue: Vec<Command> = Vec::new();
 
         for ship_id in &me.ship_ids {
             let ship = &game.ships[ship_id];
-            let cell = map.at_entity(ship);
 
-            let move_direction = gradient_map.suggest_move(&ship);
+            let move_direction = gradient_map.suggest_move(&ship, &game);
             gradient_map.process_move(&ship.position, move_direction);
             Log::log(&format!(
                 "ShipID {} goes {}",
@@ -88,28 +101,28 @@ fn main() {
             command_queue.push(command);
         }
 
-        if game.turn_number <= 200
+        if game.turn_number <= 300
             && me.halite >= game.constants.ship_cost
-            && navi.is_safe(&me.shipyard.position)
+            && !gradient_map.at_position(&me.shipyard.position).my_occupy
         {
             command_queue.push(me.shipyard.spawn());
         }
 
-        for row in gradient_map.cells.iter() {
-            let value_vec: Vec<usize> = row.iter().map(|x| x.value).collect();
-            Log::log(&format!(
-                "{:?}",
-                value_vec
-            ));
-        }
+        // for row in gradient_map.cells.iter() {
+        //     let value_vec: Vec<usize> = row.iter().map(|x| x.value).collect();
+        //     Log::log(&format!(
+        //         "{:?}",
+        //         value_vec
+        //     ));
+        // }
 
-        for row in gradient_map.cells.iter() {
-            let value_vec: Vec<bool> = row.iter().map(|x| x.my_occupy).collect();
-            Log::log(&format!(
-                "{:?}",
-                value_vec
-            ));
-        }
+        // for row in gradient_map.cells.iter() {
+        //     let value_vec: Vec<bool> = row.iter().map(|x| x.my_occupy).collect();
+        //     Log::log(&format!(
+        //         "{:?}",
+        //         value_vec
+        //     ));
+        // }
 
         Game::end_turn(&command_queue);
     }

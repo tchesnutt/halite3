@@ -4,7 +4,8 @@ use hlt::game_map::GameMap;
 use hlt::position::Position;
 use hlt::ship::Ship;
 use hlt::log::Log;
-use utils::gradient_cell::GradientCell;
+use hlt::player::Player;
+use hlt::gradient_cell::GradientCell;
 
 pub struct GradientMap {
     pub width: usize,
@@ -46,7 +47,6 @@ impl GradientMap {
             cells[ship.position.y as usize][ship.position.x as usize].my_occupy = true;
         }
 
-
         GradientMap {
             width,
             height,
@@ -72,20 +72,26 @@ impl GradientMap {
         Position { x, y }
     }
 
-    pub fn suggest_move(&mut self, ship: &Ship) -> Direction {
-        let mut max_halite: usize = 0;
+    pub fn suggest_move(&mut self, ship: &Ship, game: &Game) -> Direction {
+        if ship.halite > 666 || game.turn_number > 380 {
+            return self.drop_off_move(&ship, &game)
+        } else {
+            return self.gather_move(&ship)
+        }
+    }
+
+    fn gather_move(&mut self, ship: &Ship) -> Direction {
+        let origin_cell = &self.at_position(&ship.position);
+        let mut max_halite: usize = origin_cell.value;
         let mut best_direction: Direction = Direction::Still;
 
         for direction in Direction::get_all_cardinals() {
-            let current_position = ship.position.directional_offset(direction);
-            let gradient_cell = self.at_position_mut(&current_position);
+            let potential_position = ship.position.directional_offset(direction);
+            let potential_cell = self.at_position(&potential_position);
 
-            let potential_value: usize = match direction {
-                Direction::Still => gradient_cell.value,
-                _ => GradientMap::move_cost(&ship.halite, &gradient_cell.value),
-            };
+            let potential_value = GradientMap::move_cost(&origin_cell.value, &potential_cell.value);
 
-            if potential_value > max_halite && !gradient_cell.my_occupy {
+            if potential_value > max_halite && potential_cell.my_occupy == false {
                 max_halite = potential_value;
                 best_direction = direction;
             }
@@ -94,21 +100,76 @@ impl GradientMap {
         best_direction
     }
 
-    fn move_cost(ship_halite: &usize, potential_cell_value: &usize) -> usize {
+    fn drop_off_move(&self, ship: &Ship, game: &Game) -> Direction {
+        let shipyard_position = game.players[game.my_id.0].shipyard.position;
+        let origin_position = ship.position;
+        let direction_vector = self.get_direct_move(&origin_position, &shipyard_position);
+        for direction in direction_vector {
+            Log::log(&format!(
+                "checking direction {}",
+                direction.get_char_encoding()
+            ));
+            let potential_position = ship.position.directional_offset(direction);
+            let potential_cell = self.at_position(&potential_position);
+            
+            //needs to be general occupy
+            if game.turn_number > 380 {
+                if !potential_cell.my_occupy || potential_position == shipyard_position {
+                return direction
+                } 
+            } else {
+                if !potential_cell.my_occupy {
+                    return direction
+                }
+            }
+        }
+
+        Direction::Still
+    }
+
+    pub fn get_direct_move(&self, source: &Position, destination: &Position) -> Vec<Direction> {
+        let normalized_source = self.normalize(source);
+        let normalized_destination = self.normalize(destination);
+
+        let dx = (normalized_source.x - normalized_destination.x).abs() as usize;
+        let dy = (normalized_source.y - normalized_destination.y).abs() as usize;
+
+        let wrapped_dx = self.width - dx;
+        let wrapped_dy = self.height - dy;
+
+        let mut possible_moves: Vec<Direction> = Vec::new();
+
+        if normalized_source.x < normalized_destination.x {
+            possible_moves.push(if dx > wrapped_dx { Direction::West } else { Direction::East });
+        } else if normalized_source.x > normalized_destination.x {
+            possible_moves.push(if dx < wrapped_dx { Direction::West } else { Direction::East });
+        }
+
+        if normalized_source.y < normalized_destination.y {
+            possible_moves.push(if dy > wrapped_dy { Direction::North } else { Direction::South });
+        } else if normalized_source.y > normalized_destination.y {
+            possible_moves.push(if dy < wrapped_dy { Direction::North } else { Direction::South });
+        }
+
+        possible_moves
+    }
+
+    fn move_cost(orgin_cell_value: &usize, potential_cell_value: &usize) -> usize {
         let mut value: usize = 0;
-        if ship_halite / 10 > *potential_cell_value {
+        if orgin_cell_value / 10 > *potential_cell_value {
             value = 0;
         } else {
-            value = potential_cell_value - ship_halite / 10;
+            value = potential_cell_value - orgin_cell_value / 10;
         }
         return value;
     }
 
     pub fn process_move(&mut self, old_position: &Position, direction: Direction) {
-        // mark direction cell as occupy
-        let new_position = old_position.directional_offset(direction);
-        self.at_position_mut(&new_position).my_occupy = true;
-        self.at_position_mut(&old_position).my_occupy = false;
+        if direction != Direction::Still {
+            let new_position = old_position.directional_offset(direction);
+            self.at_position_mut(&old_position).my_occupy = false;
+            self.at_position_mut(&new_position).my_occupy = true;
+        }
     }
 
     pub fn initialize(&mut self, game: &Game) {
