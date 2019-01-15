@@ -15,17 +15,20 @@ use std::collections::HashMap;
 pub struct Navi {
     pub width: usize,
     pub height: usize,
+    pub end_game: HashMap<ShipId, bool>,
     pub time_to_home: HashMap<ShipId, bool>,
 }
 
 impl Navi {
     pub fn new(width: usize, height: usize) -> Navi {
+        let end_game: HashMap<ShipId, bool> = HashMap::new();
         let time_to_home: HashMap<ShipId, bool> = HashMap::new();
-        Navi { width, height, time_to_home }
+        Navi { width, height, end_game, time_to_home }
     }
 
     pub fn update(&mut self, ship_id: ShipId) {
-        if !self.time_to_home.contains_key(&ship_id) {
+        if !self.end_game.contains_key(&ship_id) || !self.time_to_home.contains_key(&ship_id) {
+            self.end_game.insert(ship_id, false);
             self.time_to_home.insert(ship_id, false);
         }
     }
@@ -38,27 +41,46 @@ impl Navi {
         Position { x, y }
     }
 
-    pub fn suggest_move(&mut self, gradient_map: &GradientMap, ship: &Ship, game: &Game) -> Direction {
-        if self.time_to_home[&ship.id] == false {
-            let new_bool = self.time_to_home(
+    pub fn suggest_move(&mut self, gradient_map: &GradientMap, ship: &Ship, game: &Game)-> Direction {
+        self.set_end_game(&ship, &game);
+        self.set_time_to_home(&ship, &game);
+
+
+        if self.time_to_home[&ship.id] || self.end_game[&ship.id] {
+            return self.drop_off_move(&gradient_map, &ship, &game)
+        } else {
+            return self.gather_move(&gradient_map, &ship, &game.map)
+        }
+    }
+
+    fn set_time_to_home(&mut self, ship: &Ship, game: &Game) {
+        if Navi::is_stalled(ship, &game.map.at_position(&ship.position)) ||
+            ship.position == game.players[game.my_id.0].shipyard.position {
+            if let Some(x) = self.end_game.get_mut(&ship.id) { *x = false; };
+        } else {
+            if ship.halite > 900 {
+                if !self.time_to_home[&ship.id] {
+                    if let Some(x) = self.end_game.get_mut(&ship.id) { *x = true; };
+                }
+            } else {
+                if self.time_to_home[&ship.id] {
+                    if let Some(x) = self.end_game.get_mut(&ship.id) { *x = true; };
+                }
+            }
+        }
+    }
+
+    fn set_end_game(&mut self, ship: &Ship, game: &Game) {
+        if self.end_game[&ship.id] == false {
+            let new_bool = self.end_game(
                 &ship.position, 
                 &game.turn_number, 
                 &game.constants.max_turns,
                 &game.players[game.my_id.0].shipyard.position
             );
-            if let Some(x) = self.time_to_home.get_mut(&ship.id) {
+            if let Some(x) = self.end_game.get_mut(&ship.id) {
                 *x = new_bool;
             };
-            Log::log(&format!(
-                "SHIP_ID {} and HOME? {}.",
-                ship.id.0, new_bool
-            ));
-        }
-
-        if ship.halite > 666 || self.time_to_home[&ship.id] {
-            return self.drop_off_move(&gradient_map, &ship, &game)
-        } else {
-            return self.gather_move(&gradient_map, &ship, &game.map)
         }
     }
 
@@ -156,7 +178,8 @@ impl Navi {
         stalled
     }
 
-    fn time_to_home(&self, ship_position: &Position, turn_number: &usize, max_turns: &usize, shipyard_position: &Position) -> bool {
+    fn end_game(&self, ship_position: &Position, turn_number: &usize, max_turns: &usize, shipyard_position: &Position) -> bool {
+        // refactor so only compute disties once
         if turn_number > &300 {
             let turns_remaining = max_turns - turn_number;
             let mut dis_x = 0;
@@ -177,7 +200,7 @@ impl Navi {
                 dis_x, dis_y
             ));
 
-            if dis_y + dis_x + 5 >= turns_remaining as i32 {
+            if dis_y + dis_x + 15 >= turns_remaining as i32 {
                 return true;
             }
         };

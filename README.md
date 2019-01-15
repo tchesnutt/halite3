@@ -3,6 +3,9 @@ Write up coming eventually.
 
 ## Versions
 
+*v4*
+* Added logic to complete go home 
+
 *v3* 
 * Refactor: move logic to Navi
 * Enemy ship avoidance added unless near shipyard

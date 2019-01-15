@@ -27,7 +27,7 @@ fn main() {
     let mut game = Game::new();
     let mut navi = Navi::new(game.map.width, game.map.height);
 
-    Game::ready("mellow root");
+    Game::ready("mellow root v4");
 
     Log::log(&format!(
         "Successfully created bot! My Player ID is {}. Bot rng seed is {}.",
