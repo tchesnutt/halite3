@@ -1,11 +1,11 @@
 use hlt::direction::Direction;
 use hlt::game::Game;
 use hlt::game_map::GameMap;
-use hlt::position::Position;
-use hlt::ship::Ship;
+use hlt::gradient_cell::GradientCell;
 use hlt::log::Log;
 use hlt::player::Player;
-use hlt::gradient_cell::GradientCell;
+use hlt::position::Position;
+use hlt::ship::Ship;
 
 pub struct GradientMap {
     pub width: usize,
@@ -40,11 +40,29 @@ impl GradientMap {
             cells.push(row);
         }
 
-        //record my ship locations
-        let ship_ids = &game.players[game.my_id.0].ship_ids;
-        for ship_id in ship_ids {
-            let ship = &game.ships[ship_id];
-            cells[ship.position.y as usize][ship.position.x as usize].my_occupy = true;
+        //record position of enemy ships
+        for player in &game.players {
+            if player.id.0 != game.my_id.0 {
+                for ship_id in &player.ship_ids {
+                    let position = &game.ships[ship_id].position;
+                    cells[position.y as usize][position.x as usize].my_occupy = true;
+                }
+            }
+        }
+
+        let me = &game.players[game.my_id.0];
+        //undo true if enemy ship is on or adjacent to shipyard
+        let shipyard_position = me.shipyard.position;
+        cells[shipyard_position.y as usize][shipyard_position.x as usize].my_occupy = false;
+        for direction in Direction::get_all_cardinals() {
+            let position = shipyard_position.directional_offset(direction);
+            cells[position.y as usize][position.x as usize].my_occupy = false;
+        }
+
+        //record my ship positions
+        for ship_id in &me.ship_ids {
+            let position = &game.ships[ship_id].position;
+            cells[position.y as usize][position.x as usize].my_occupy = true;
         }
 
         GradientMap {
@@ -87,11 +105,11 @@ impl GradientMap {
 
     fn adjust_cells_for_adjacent_ship_entities(&mut self, game: &Game) {
         // for each ship
-        for enemy_player in &game.enemy_players(){
+        for enemy_player in &game.enemy_players() {
             for enemy_ship_id in &enemy_player.ship_ids {
                 let ship = &game.ships[enemy_ship_id];
                 //loop over 4-radius and increase ship_count on gradient cell
-            
+
                 for j in -4..4 {
                     for i in -4..4 {
                         let current_position = Position {
@@ -116,7 +134,7 @@ impl GradientMap {
 
     fn adjust_for_bullshit_on_my_shipyard(&mut self, game: &Game) {
         let my_shipyard_position = &game.players[game.my_id.0].shipyard.position;
-        
+
         for enemy_player in &game.enemy_players() {
             for enemy_ship_id in &enemy_player.ship_ids {
                 let ship_position = &game.ships[enemy_ship_id].position;

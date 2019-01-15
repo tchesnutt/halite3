@@ -1,13 +1,15 @@
+use hlt::map_cell::MapCell;
 use hlt::direction::Direction;
 use hlt::position::Position;
 use hlt::ship::Ship;
 use hlt::ShipId;
 use hlt::game::Game;
 use hlt::game_map::GameMap;
+use hlt::gradient_cell::GradientCell;
+use hlt::gradient_map::GradientMap;
 use hlt::log::Log;
 
 
-use hlt::gradient_map::GradientMap;
 
 pub struct Navi {
     pub width: usize,
@@ -37,16 +39,17 @@ impl Navi {
         if ship.halite > 666 || game.turn_number > 380 {
             return self.drop_off_move(&gradient_map, &ship, &game)
         } else {
-            return self.gather_move(&gradient_map, &ship)
+            return self.gather_move(&gradient_map, &ship, &game.map)
         }
     }
 
-    fn gather_move(&self, gradient_map: &GradientMap, ship: &Ship) -> Direction {
-        let origin_cell = &gradient_map.at_position(&ship.position);
-        let mut max_halite: usize = origin_cell.value;
+    fn gather_move(&self, gradient_map: &GradientMap, ship: &Ship, game_map: &GameMap) -> Direction {
+        let origin_cell_g = &gradient_map.at_position(&ship.position);
+        let origin_cell_m = &game_map.at_position(&ship.position);
+        let mut current_value: usize = origin_cell_g.value;
         let mut best_direction: Direction = Direction::Still;
 
-        if ship.halite < origin_cell.value * 4 / 10 {
+        if Navi::is_stalled(ship, origin_cell_m) {
             return best_direction
         }
 
@@ -54,10 +57,10 @@ impl Navi {
             let potential_position = ship.position.directional_offset(direction);
             let potential_cell = gradient_map.at_position(&potential_position);
 
-            let potential_value = Navi::move_cost(&origin_cell.value, &potential_cell.value);
+            let potential_value = Navi::move_cost(&origin_cell_g.value, &potential_cell.value);
 
-            if potential_value > max_halite && potential_cell.my_occupy == false {
-                max_halite = potential_value;
+            if potential_value > current_value && potential_cell.my_occupy == false {
+                current_value = potential_value;
                 best_direction = direction;
             }
         }
@@ -127,5 +130,10 @@ impl Navi {
         }
 
         possible_moves
+    }
+
+    fn is_stalled(ship: &Ship, origin_cell: &MapCell) -> bool {
+        let stalled = if ship.halite < origin_cell.halite / 10 { true } else { false };
+        stalled
     }
 }
