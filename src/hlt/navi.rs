@@ -8,24 +8,27 @@ use hlt::game_map::GameMap;
 use hlt::gradient_cell::GradientCell;
 use hlt::gradient_map::GradientMap;
 use hlt::log::Log;
+use std::collections::HashMap;
 
 
 
 pub struct Navi {
     pub width: usize,
     pub height: usize,
-    pub collision_with_stalled: Vec<ShipId>,
+    pub time_to_home: HashMap<ShipId, bool>,
 }
 
 impl Navi {
     pub fn new(width: usize, height: usize) -> Navi {
-        let collision_with_stalled: Vec<ShipId> = Vec::new();
-        Navi { width, height, collision_with_stalled }
+        let time_to_home: HashMap<ShipId, bool> = HashMap::new();
+        Navi { width, height, time_to_home }
     }
 
-    pub fn update(&mut self) {
-        self.collision_with_stalled.clear();
-    }    
+    pub fn update(&mut self, ship_id: ShipId) {
+        if !self.time_to_home.contains_key(&ship_id) {
+            self.time_to_home.insert(ship_id, false);
+        }
+    }
 
     pub fn normalize(&self, position: &Position) -> Position {
         let width = self.width as i32;
@@ -36,7 +39,23 @@ impl Navi {
     }
 
     pub fn suggest_move(&mut self, gradient_map: &GradientMap, ship: &Ship, game: &Game) -> Direction {
-        if ship.halite > 666 || game.turn_number > 380 {
+        if self.time_to_home[&ship.id] == false {
+            let new_bool = self.time_to_home(
+                &ship.position, 
+                &game.turn_number, 
+                &game.constants.max_turns,
+                &game.players[game.my_id.0].shipyard.position
+            );
+            if let Some(x) = self.time_to_home.get_mut(&ship.id) {
+                *x = new_bool;
+            };
+            Log::log(&format!(
+                "SHIP_ID {} and HOME? {}.",
+                ship.id.0, new_bool
+            ));
+        }
+
+        if ship.halite > 666 || self.time_to_home[&ship.id] {
             return self.drop_off_move(&gradient_map, &ship, &game)
         } else {
             return self.gather_move(&gradient_map, &ship, &game.map)
@@ -135,5 +154,33 @@ impl Navi {
     fn is_stalled(ship: &Ship, origin_cell: &MapCell) -> bool {
         let stalled = if ship.halite < origin_cell.halite / 10 { true } else { false };
         stalled
+    }
+
+    fn time_to_home(&self, ship_position: &Position, turn_number: &usize, max_turns: &usize, shipyard_position: &Position) -> bool {
+        if turn_number > &300 {
+            let turns_remaining = max_turns - turn_number;
+            let mut dis_x = 0;
+            let mut dis_y = 0;
+            if (self.width as i32 - ship_position.x).abs() < (shipyard_position.x - ship_position.x).abs() {
+                dis_x = self.width as i32 - ship_position.x + shipyard_position.x;
+            } else {
+                dis_x = (shipyard_position.x - ship_position.x).abs();
+            };
+            if (self.height as i32 - ship_position.y).abs() < (shipyard_position.y - ship_position.y).abs() {
+                dis_y = self.height as i32 - ship_position.y + shipyard_position.y;
+            } else {
+                dis_y = (shipyard_position.y - ship_position.y).abs();
+            };
+
+            Log::log(&format!(
+                "dis_x {} and dis_y {}.",
+                dis_x, dis_y
+            ));
+
+            if dis_y + dis_x + 5 >= turns_remaining as i32 {
+                return true;
+            }
+        };
+        false
     }
 }

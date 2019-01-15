@@ -99,7 +99,7 @@ impl GradientMap {
     }
 
     pub fn initialize(&mut self, game: &Game) {
-        //self.adjust_cells_for_adjacent_ship_entities(&game);
+        self.adjust_cells_for_adjacent_ship_entities(&game);
         self.adjust_for_bullshit_on_my_shipyard(&game);
     }
 
@@ -116,8 +116,9 @@ impl GradientMap {
                             x: ship.position.x + i as i32,
                             y: ship.position.y + j as i32,
                         };
+                        let normalized = self.normalize(&current_position);
 
-                        self.cells[current_position.y as usize][current_position.x as usize]
+                        self.cells[normalized.y as usize][normalized.x as usize]
                             .nearby_ship_count += 1;
                     }
                 }

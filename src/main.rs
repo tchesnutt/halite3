@@ -7,8 +7,6 @@ use hlt::game::Game;
 use hlt::log::Log;
 use hlt::navi::Navi;
 use hlt::gradient_map::GradientMap;
-use rand::SeedableRng;
-use rand::XorShiftRng;
 use std::env;
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
@@ -25,31 +23,9 @@ fn main() {
             .unwrap()
             .as_secs()
     };
-    let seed_bytes: Vec<u8> = (0..16)
-        .map(|x| ((rng_seed >> (x % 8)) & 0xFF) as u8)
-        .collect();
-    let mut rng: XorShiftRng = SeedableRng::from_seed([
-        seed_bytes[0],
-        seed_bytes[1],
-        seed_bytes[2],
-        seed_bytes[3],
-        seed_bytes[4],
-        seed_bytes[5],
-        seed_bytes[6],
-        seed_bytes[7],
-        seed_bytes[8],
-        seed_bytes[9],
-        seed_bytes[10],
-        seed_bytes[11],
-        seed_bytes[12],
-        seed_bytes[13],
-        seed_bytes[14],
-        seed_bytes[15],
-    ]);
 
     let mut game = Game::new();
     let mut navi = Navi::new(game.map.width, game.map.height);
-
 
     Game::ready("mellow root");
 
@@ -60,7 +36,7 @@ fn main() {
 
     loop {
         game.update_frame();
-        navi.update();
+        
         
 
         let mut gradient_map = GradientMap::construct(&game);
@@ -88,6 +64,8 @@ fn main() {
         let mut command_queue: Vec<Command> = Vec::new();
 
         for ship_id in &me.ship_ids {
+            navi.update(*ship_id);
+
             let ship = &game.ships[ship_id];
 
             let move_direction = navi.suggest_move(&gradient_map, &ship, &game);
@@ -102,7 +80,7 @@ fn main() {
             command_queue.push(command);
         }
 
-        if game.turn_number <= 250
+        if game.turn_number <= 200
             && me.halite >= game.constants.ship_cost
             && !gradient_map.at_position(&me.shipyard.position).my_occupy
         {
