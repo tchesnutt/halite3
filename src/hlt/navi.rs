@@ -3,61 +3,106 @@ use hlt::position::Position;
 use hlt::ship::Ship;
 use hlt::ShipId;
 use hlt::game::Game;
+use hlt::game_map::GameMap;
+use hlt::log::Log;
+
+
+use hlt::gradient_map::GradientMap;
 
 pub struct Navi {
     pub width: usize,
     pub height: usize,
-    pub occupied: Vec<Vec<Option<ShipId>>>,
+    pub collision_with_stalled: Vec<ShipId>,
 }
 
 impl Navi {
     pub fn new(width: usize, height: usize) -> Navi {
-        let mut occupied: Vec<Vec<Option<ShipId>>> = Vec::with_capacity(height);
-        for _ in 0..height {
-            occupied.push(vec![None; width]);
-        }
-
-        Navi { width, height, occupied }
+        let collision_with_stalled: Vec<ShipId> = Vec::new();
+        Navi { width, height, collision_with_stalled }
     }
 
-    pub fn update_frame(&mut self, game: &Game) {
-        self.clear();
+    pub fn update(&mut self) {
+        self.collision_with_stalled.clear();
+    }    
 
-        for player in &game.players {
-            for ship_id in &player.ship_ids {
-                let ship = &game.ships[ship_id];
-                self.mark_unsafe_ship(&ship);
+    pub fn normalize(&self, position: &Position) -> Position {
+        let width = self.width as i32;
+        let height = self.height as i32;
+        let x = ((position.x % width) + width) % width;
+        let y = ((position.y % height) + height) % height;
+        Position { x, y }
+    }
+
+    pub fn suggest_move(&mut self, gradient_map: &GradientMap, ship: &Ship, game: &Game) -> Direction {
+        if ship.halite > 666 || game.turn_number > 380 {
+            return self.drop_off_move(&gradient_map, &ship, &game)
+        } else {
+            return self.gather_move(&gradient_map, &ship)
+        }
+    }
+
+    fn gather_move(&self, gradient_map: &GradientMap, ship: &Ship) -> Direction {
+        let origin_cell = &gradient_map.at_position(&ship.position);
+        let mut max_halite: usize = origin_cell.value;
+        let mut best_direction: Direction = Direction::Still;
+
+        if ship.halite < origin_cell.value * 4 / 10 {
+            return best_direction
+        }
+
+        for direction in Direction::get_all_cardinals() {
+            let potential_position = ship.position.directional_offset(direction);
+            let potential_cell = gradient_map.at_position(&potential_position);
+
+            let potential_value = Navi::move_cost(&origin_cell.value, &potential_cell.value);
+
+            if potential_value > max_halite && potential_cell.my_occupy == false {
+                max_halite = potential_value;
+                best_direction = direction;
             }
         }
+
+        best_direction
     }
 
-    pub fn clear(&mut self) {
-        for y in 0..self.height {
-            for x in 0..self.width {
-                self.occupied[y][x] = None;
+    fn move_cost(origin_cell_value: &usize, potential_cell_value: &usize) -> usize {
+        let mut value: usize = 0;
+        if origin_cell_value / 10 > *potential_cell_value {
+            value = 0;
+        } else {
+            value = potential_cell_value - origin_cell_value / 10;
+        }
+        return value;
+    }
+
+    fn drop_off_move(&self, gradient_map: &GradientMap, ship: &Ship, game: &Game) -> Direction {
+        let shipyard_position = game.players[game.my_id.0].shipyard.position;
+        let origin_position = ship.position;
+        let direction_vector = self.get_direct_move(&origin_position, &shipyard_position);
+        for direction in direction_vector {
+            Log::log(&format!(
+                "checking direction {}",
+                direction.get_char_encoding()
+            ));
+            let potential_position = ship.position.directional_offset(direction);
+            let potential_cell = gradient_map.at_position(&potential_position);
+            
+            //needs to be general occupy
+            if game.turn_number > 380 {
+                if potential_cell.my_occupy == false || potential_position == shipyard_position {
+                return direction
+                } 
+            } else {
+                if potential_cell.my_occupy == false && ship.halite > potential_cell.value * 4 / 10 {
+                    return direction
+                }
             }
         }
+
+        Direction::Still
     }
 
-    pub fn is_safe(&self, position: &Position) -> bool {
-        let position = self.normalize(position);
-        self.occupied[position.y as usize][position.x as usize].is_none()
-    }
-
-    pub fn is_unsafe(&self, position: &Position) -> bool {
-        !self.is_safe(position)
-    }
-
-    pub fn mark_unsafe(&mut self, position: &Position, ship_id: ShipId) {
-        let position = self.normalize(position);
-        self.occupied[position.y as usize][position.x as usize] = Some(ship_id);
-    }
-
-    pub fn mark_unsafe_ship(&mut self, ship: &Ship) {
-        self.mark_unsafe(&ship.position, ship.id);
-    }
-
-    pub fn get_unsafe_moves(&self, source: &Position, destination: &Position) -> Vec<Direction> {
+    pub fn get_direct_move(&self, source: &Position, destination: &Position) -> Vec<Direction> {
         let normalized_source = self.normalize(source);
         let normalized_destination = self.normalize(destination);
 
@@ -82,29 +127,5 @@ impl Navi {
         }
 
         possible_moves
-    }
-
-    pub fn naive_navigate(&mut self, ship: &Ship, destination: &Position) -> Direction {
-        let ship_position = &ship.position;
-
-        // get_unsafe_moves normalizes for us
-        for direction in self.get_unsafe_moves(&ship_position, destination) {
-            let target_pos = ship_position.directional_offset(direction);
-
-            if self.is_safe(&target_pos) {
-                self.mark_unsafe(&target_pos, ship.id);
-                return direction;
-            }
-        }
-
-        Direction::Still
-    }
-
-    pub fn normalize(&self, position: &Position) -> Position {
-        let width = self.width as i32;
-        let height = self.height as i32;
-        let x = ((position.x % width) + width) % width;
-        let y = ((position.y % height) + height) % height;
-        Position { x, y }
     }
 }

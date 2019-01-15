@@ -60,7 +60,8 @@ fn main() {
 
     loop {
         game.update_frame();
-        navi.update_frame(&game);
+        navi.update();
+        
 
         let mut gradient_map = GradientMap::construct(&game);
 
@@ -89,7 +90,7 @@ fn main() {
         for ship_id in &me.ship_ids {
             let ship = &game.ships[ship_id];
 
-            let move_direction = gradient_map.suggest_move(&ship, &game);
+            let move_direction = navi.suggest_move(&gradient_map, &ship, &game);
             gradient_map.process_move(&ship.position, move_direction);
             Log::log(&format!(
                 "ShipID {} goes {}",
@@ -101,7 +102,7 @@ fn main() {
             command_queue.push(command);
         }
 
-        if game.turn_number <= 300
+        if game.turn_number <= 250
             && me.halite >= game.constants.ship_cost
             && !gradient_map.at_position(&me.shipyard.position).my_occupy
         {
