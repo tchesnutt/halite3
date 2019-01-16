@@ -40,24 +40,24 @@ fn main() {
         
 
         let mut gradient_map = GradientMap::construct(&game);
-
-        // for row in gradient_map.cells.iter() {
-        //     let value_vec: Vec<usize> = row.iter().map(|x| x.value).collect();
-        //     Log::log(&format!(
-        //         "{:?}",
-        //         value_vec
-        //     ));
-        // }
-
-        // for row in gradient_map.cells.iter() {
-        //     let value_vec: Vec<bool> = row.iter().map(|x| x.my_occupy).collect();
-        //     Log::log(&format!(
-        //         "{:?}",
-        //         value_vec
-        //     ));
-        // }
-
         gradient_map.initialize(&game);
+
+        for row in gradient_map.cells.iter() {
+            let value_vec: Vec<f64> = row.iter().map(|x| x.value).collect();
+            Log::log(&format!(
+                "{:?}",
+                value_vec
+            ));
+        }
+
+        // for row in gradient_map.cells.iter() {
+        //     let value_vec: Vec<bool> = row.iter().map(|x| x.).collect();
+        //     Log::log(&format!(
+        //         "{:?}",
+        //         value_vec
+        //     ));
+        // }
+
 
         let me = &game.players[game.my_id.0];
 

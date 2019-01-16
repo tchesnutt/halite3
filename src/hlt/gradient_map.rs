@@ -26,12 +26,18 @@ impl GradientMap {
                     x: x as i32,
                     y: y as i32,
                 };
-                let value: usize = game.map.at_position(&position).halite / 4;
+                let collection_amt: f64 = game.map.at_position(&position).halite as f64 / 4 as f64;
+                let value: f64 = collection_amt;
+                let move_cost: f64 = game.map.at_position(&position).halite as f64 / 10 as f64;
                 let nearby_ship_count: i8 = 0;
+                let surrounding_average: f64 = 0.0;
                 let my_occupy = false;
                 let cell = GradientCell {
                     position,
                     value,
+                    collection_amt,
+                    surrounding_average,
+                    move_cost,
                     my_occupy,
                     nearby_ship_count,
                 };
@@ -100,6 +106,7 @@ impl GradientMap {
 
     pub fn initialize(&mut self, game: &Game) {
         self.adjust_cells_for_adjacent_ship_entities(&game);
+        self.smoothing();
         self.adjust_for_bullshit_on_my_shipyard(&game);
     }
 
@@ -128,7 +135,7 @@ impl GradientMap {
         // for each gradient cell increase value if nearby_ship_count is greater than 2
         for cell in self.cells.iter_mut().flatten() {
             if cell.nearby_ship_count > 1 {
-                cell.value = cell.value + cell.value * 2;
+                cell.value += cell.collection_amt * 2.0;
             }
         }
     }
@@ -140,8 +147,41 @@ impl GradientMap {
             for enemy_ship_id in &enemy_player.ship_ids {
                 let ship_position = &game.ships[enemy_ship_id].position;
                 if ship_position == my_shipyard_position {
-                    self.at_position_mut(ship_position).value = 1000;
+                    self.at_position_mut(ship_position).value = 1000.0;
                 }
+            }
+        }
+    }
+
+    //makes each cell value an average of the others
+    fn smoothing(&mut self) {
+        for y in 0..self.height {
+            for x in 0..self.width {
+                let mut average = self.cells[y][x].value;
+                let current_position = Position {
+                    x: x as i32,
+                    y: y as i32,
+                };
+
+                for direction in Direction::get_all_cardinals() {
+                    let adj_position = current_position.directional_offset(direction);
+                    if x == 8 && y == 16 {
+                        Log::log(&format!("direction {} and value {}.", direction.get_char_encoding(), self.at_position(&adj_position).value));
+                    }
+                    average += self.at_position(&adj_position).value;
+                    if x == 8 && y == 16 {
+                        Log::log(&format!("average_v {}.", average));
+                    }
+                }
+
+                average /= 5.0;
+
+                if average == 0.0 {
+                    Log::log(&format!("dis_x {} and dis_y {}.", x, y));
+                }
+
+                self.cells[y][x].surrounding_average = average;
+                self.cells[y][x].value = average;
             }
         }
     }

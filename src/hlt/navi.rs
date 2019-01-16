@@ -87,18 +87,23 @@ impl Navi {
     fn gather_move(&self, gradient_map: &GradientMap, ship: &Ship, game_map: &GameMap) -> Direction {
         let origin_cell_g = &gradient_map.at_position(&ship.position);
         let origin_cell_m = &game_map.at_position(&ship.position);
-        let mut current_value: usize = origin_cell_g.value;
+        let mut current_value: f64 = origin_cell_g.value;
         let mut best_direction: Direction = Direction::Still;
 
         if Navi::is_stalled(ship, origin_cell_m) {
-            return best_direction
+            return Direction::Still
         }
 
         for direction in Direction::get_all_cardinals() {
             let potential_position = ship.position.directional_offset(direction);
             let potential_cell = gradient_map.at_position(&potential_position);
 
-            let potential_value = Navi::move_cost(&origin_cell_g.value, &potential_cell.value);
+            let potential_value = Navi::evaluate_move(&potential_cell.move_cost, &potential_cell.value);
+
+            Log::log(&format!(
+                "shipid {} and direction {} sees calc_value {} and cell_value {}.",
+                ship.id.0, direction.get_char_encoding(), potential_value, &potential_cell.value
+            ));
 
             if potential_value > current_value && potential_cell.my_occupy == false {
                 current_value = potential_value;
@@ -109,35 +114,32 @@ impl Navi {
         best_direction
     }
 
-    fn move_cost(origin_cell_value: &usize, potential_cell_value: &usize) -> usize {
-        let mut value: usize = 0;
-        if origin_cell_value / 10 > *potential_cell_value {
-            value = 0;
+    fn evaluate_move(move_cost: &f64, potential_cell_value: &f64) -> f64 {
+        let mut weight = 0.0;
+        if move_cost > &*potential_cell_value {
+            weight = 0.0;
         } else {
-            value = potential_cell_value - origin_cell_value / 10;
+            weight = potential_cell_value - move_cost / 10.0;
         }
-        return value;
+        return weight;
     }
 
     fn drop_off_move(&self, gradient_map: &GradientMap, ship: &Ship, game: &Game) -> Direction {
         let shipyard_position = game.players[game.my_id.0].shipyard.position;
         let origin_position = ship.position;
+        let origin_cell = gradient_map.at_position(&origin_position);
         let direction_vector = self.get_direct_move(&origin_position, &shipyard_position);
         for direction in direction_vector {
-            Log::log(&format!(
-                "checking direction {}",
-                direction.get_char_encoding()
-            ));
             let potential_position = ship.position.directional_offset(direction);
             let potential_cell = gradient_map.at_position(&potential_position);
             
             //needs to be general occupy
-            if game.turn_number > 380 {
+            if self.end_game[&ship.id] {
                 if potential_cell.my_occupy == false || potential_position == shipyard_position {
-                return direction
+                    return direction
                 } 
             } else {
-                if potential_cell.my_occupy == false && ship.halite > potential_cell.value * 4 / 10 {
+                if potential_cell.my_occupy == false && ship.halite as f64 > origin_cell.move_cost {
                     return direction
                 }
             }
@@ -204,6 +206,7 @@ impl Navi {
                 return true;
             }
         };
+
         false
     }
 }
