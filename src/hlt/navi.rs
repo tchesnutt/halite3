@@ -56,15 +56,11 @@ impl Navi {
     fn set_time_to_home(&mut self, ship: &Ship, game: &Game) {
         if Navi::is_stalled(ship, &game.map.at_position(&ship.position)) ||
             ship.position == game.players[game.my_id.0].shipyard.position {
-            if let Some(x) = self.end_game.get_mut(&ship.id) { *x = false; };
+            if let Some(x) = self.time_to_home.get_mut(&ship.id) { *x = false; };
         } else {
             if ship.halite > 900 {
                 if !self.time_to_home[&ship.id] {
-                    if let Some(x) = self.end_game.get_mut(&ship.id) { *x = true; };
-                }
-            } else {
-                if self.time_to_home[&ship.id] {
-                    if let Some(x) = self.end_game.get_mut(&ship.id) { *x = true; };
+                    if let Some(x) = self.time_to_home.get_mut(&ship.id) { *x = true; };
                 }
             }
         }
@@ -98,7 +94,7 @@ impl Navi {
             let potential_position = ship.position.directional_offset(direction);
             let potential_cell = gradient_map.at_position(&potential_position);
 
-            let potential_value = Navi::evaluate_move(&potential_cell.move_cost, &potential_cell.value);
+            let potential_value = Navi::evaluate_move(&origin_cell_g.move_cost, &potential_cell.value, &origin_cell_g.collection_amt);
 
             Log::log(&format!(
                 "shipid {} and direction {} sees calc_value {} and cell_value {}.",
@@ -114,14 +110,12 @@ impl Navi {
         best_direction
     }
 
-    fn evaluate_move(move_cost: &f64, potential_cell_value: &f64) -> f64 {
+    fn evaluate_move(move_cost: &f64, potential_cell_value: &f64, current_value: &f64) -> f64 {
         let mut weight = 0.0;
-        if move_cost > &*potential_cell_value {
-            weight = 0.0;
-        } else {
-            weight = potential_cell_value - move_cost / 10.0;
-        }
-        return weight;
+        
+        weight = potential_cell_value - move_cost - current_value;
+
+        return weight + 0.1;
     }
 
     fn drop_off_move(&self, gradient_map: &GradientMap, ship: &Ship, game: &Game) -> Direction {
@@ -202,7 +196,7 @@ impl Navi {
                 dis_x, dis_y
             ));
 
-            if dis_y + dis_x + 15 >= turns_remaining as i32 {
+            if dis_y + dis_x + 10 >= turns_remaining as i32 {
                 return true;
             }
         };

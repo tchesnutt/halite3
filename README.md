@@ -1,7 +1,12 @@
 # Halite 3
 Write up coming eventually.
 
-## Versions
+## Notable Versions
+
+*v6*
+* Added blur function to computation of value
+* Added cell distance from origin function to computation of value
+* Fixed major bug with gather_move function
 
 *v4*
 * Added logic to complete go home 

@@ -107,6 +107,7 @@ impl GradientMap {
     pub fn initialize(&mut self, game: &Game) {
         self.adjust_cells_for_adjacent_ship_entities(&game);
         self.smoothing();
+        self.adjust_for_distance(&game);
         self.adjust_for_bullshit_on_my_shipyard(&game);
     }
 
@@ -166,7 +167,11 @@ impl GradientMap {
                 for direction in Direction::get_all_cardinals() {
                     let adj_position = current_position.directional_offset(direction);
                     if x == 8 && y == 16 {
-                        Log::log(&format!("direction {} and value {}.", direction.get_char_encoding(), self.at_position(&adj_position).value));
+                        Log::log(&format!(
+                            "direction {} and value {}.",
+                            direction.get_char_encoding(),
+                            self.at_position(&adj_position).value
+                        ));
                     }
                     average += self.at_position(&adj_position).value;
                     if x == 8 && y == 16 {
@@ -181,7 +186,36 @@ impl GradientMap {
                 }
 
                 self.cells[y][x].surrounding_average = average;
-                self.cells[y][x].value = average;
+                self.cells[y][x].value += average;
+            }
+        }
+    }
+
+    fn adjust_for_distance(&mut self, game: &Game) {
+        let shipyard_position = &game.players[game.my_id.0].shipyard.position;
+
+        for y in 0..self.height as i32 {
+            for x in 0..self.width as i32 {
+                let mut dis_x = 0;
+                let mut dis_y = 0;
+                if (self.width as i32 - x).abs()
+                    < (shipyard_position.x - x).abs()
+                {
+                    dis_x = self.width as i32 - x + shipyard_position.x;
+                } else {
+                    dis_x = (shipyard_position.x - x).abs();
+                };
+                if (self.height as i32 - y).abs()
+                    < (shipyard_position.y - y).abs()
+                {
+                    dis_y = self.height as i32 - y + shipyard_position.y;
+                } else {
+                    dis_y = (shipyard_position.y - y).abs();
+                };
+
+                let distance = dis_y + dis_x;
+
+                self.cells[y as usize][x as usize].value += (self.height as f64 + self.width as f64 - distance as f64) / 2.0;
             }
         }
     }
