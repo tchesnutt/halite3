@@ -10,6 +10,7 @@ use hlt::ship::Ship;
 pub struct GradientMap {
     pub width: usize,
     pub height: usize,
+    pub halite_remaining: usize,
     pub cells: Vec<Vec<GradientCell>>,
 }
 
@@ -17,21 +18,28 @@ impl GradientMap {
     pub fn construct(game: &Game) -> GradientMap {
         let height = game.map.height;
         let width = game.map.width;
+        let mut halite_remaining = 0;
 
         let mut cells: Vec<Vec<GradientCell>> = Vec::with_capacity(height);
+
         for y in 0..height {
             let mut row: Vec<GradientCell> = Vec::with_capacity(width);
+
             for x in 0..width {
                 let position = Position {
                     x: x as i32,
                     y: y as i32,
                 };
-                let collection_amt: f64 = game.map.at_position(&position).halite as f64 / 4 as f64;
+                let cell_halite: usize = game.map.at_position(&position).halite;
+                halite_remaining += cell_halite;
+
+                let collection_amt: f64 = cell_halite as f64 / 4 as f64;
                 let value: f64 = collection_amt;
-                let move_cost: f64 = game.map.at_position(&position).halite as f64 / 10 as f64;
+                let move_cost: f64 = cell_halite as f64 / 10 as f64;
                 let nearby_ship_count: i8 = 0;
                 let surrounding_average: f64 = 0.0;
                 let my_occupy = false;
+
                 let cell = GradientCell {
                     position,
                     value,
@@ -41,6 +49,7 @@ impl GradientMap {
                     my_occupy,
                     nearby_ship_count,
                 };
+
                 row.push(cell);
             }
             cells.push(row);
@@ -74,6 +83,7 @@ impl GradientMap {
         GradientMap {
             width,
             height,
+            halite_remaining,
             cells,
         }
     }
@@ -198,16 +208,12 @@ impl GradientMap {
             for x in 0..self.width as i32 {
                 let mut dis_x = 0;
                 let mut dis_y = 0;
-                if (self.width as i32 - x).abs()
-                    < (shipyard_position.x - x).abs()
-                {
+                if (self.width as i32 - x).abs() < (shipyard_position.x - x).abs() {
                     dis_x = self.width as i32 - x + shipyard_position.x;
                 } else {
                     dis_x = (shipyard_position.x - x).abs();
                 };
-                if (self.height as i32 - y).abs()
-                    < (shipyard_position.y - y).abs()
-                {
+                if (self.height as i32 - y).abs() < (shipyard_position.y - y).abs() {
                     dis_y = self.height as i32 - y + shipyard_position.y;
                 } else {
                     dis_y = (shipyard_position.y - y).abs();
@@ -215,7 +221,8 @@ impl GradientMap {
 
                 let distance = dis_y + dis_x;
 
-                self.cells[y as usize][x as usize].value += (self.height as f64 + self.width as f64 - distance as f64) / 2.0;
+                self.cells[y as usize][x as usize].value +=
+                    (self.height as f64 + self.width as f64 - distance as f64) / 2.0;
             }
         }
     }

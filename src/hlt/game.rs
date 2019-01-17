@@ -113,4 +113,9 @@ impl Game {
         let enemy_players = self.players.iter().filter(|x| x.id != self.my_id).collect();
         enemy_players
     }
+
+    pub fn half_halite_collected(total: &usize, remaining: &usize) -> bool {
+        if total < &(remaining * 2) { return true };
+        false
+    }
 }

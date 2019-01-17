@@ -8,6 +8,7 @@ use std::cmp::min;
 pub struct GameMap {
     pub width: usize,
     pub height: usize,
+    pub total_halite: usize,
     pub cells: Vec<Vec<MapCell>>,
 }
 
@@ -69,6 +70,7 @@ impl GameMap {
         input.read_and_parse_line();
         let width = input.next_usize();
         let height = input.next_usize();
+        let mut total_halite = 0;
 
         let mut cells: Vec<Vec<MapCell>> = Vec::with_capacity(height);
         for y in 0..height {
@@ -77,6 +79,7 @@ impl GameMap {
             let mut row: Vec<MapCell> = Vec::with_capacity(width);
             for x in 0..width {
                 let halite = input.next_usize();
+                total_halite += halite;
 
                 let position = Position { x: x as i32, y: y as i32 };
                 let cell = MapCell { position, halite, structure: Structure::None };
@@ -86,6 +89,6 @@ impl GameMap {
             cells.push(row);
         }
 
-        GameMap { width, height, cells }
+        GameMap { width, height, total_halite, cells }
     }
 }

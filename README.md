@@ -5,7 +5,7 @@ Write up coming eventually.
 
 *v6*
 * Added blur function to computation of value
-* Added cell distance from origin function to computation of value
+* Added cell distance from drop-off function to computation of value
 * Fixed major bug with gather_move function
 
 *v4*

@@ -27,7 +27,7 @@ fn main() {
     let mut game = Game::new();
     let mut navi = Navi::new(game.map.width, game.map.height);
 
-    Game::ready("mellow root v4");
+    Game::ready("mellow root v5");
 
     Log::log(&format!(
         "Successfully created bot! My Player ID is {}. Bot rng seed is {}.",
@@ -42,13 +42,13 @@ fn main() {
         let mut gradient_map = GradientMap::construct(&game);
         gradient_map.initialize(&game);
 
-        for row in gradient_map.cells.iter() {
-            let value_vec: Vec<f64> = row.iter().map(|x| x.value).collect();
-            Log::log(&format!(
-                "{:?}",
-                value_vec
-            ));
-        }
+        // for row in gradient_map.cells.iter() {
+        //     let value_vec: Vec<f64> = row.iter().map(|x| x.value).collect();
+        //     Log::log(&format!(
+        //         "{:?}",
+        //         value_vec
+        //     ));
+        // }
 
         // for row in gradient_map.cells.iter() {
         //     let value_vec: Vec<bool> = row.iter().map(|x| x.).collect();
@@ -80,7 +80,7 @@ fn main() {
             command_queue.push(command);
         }
 
-        if game.turn_number <= 200
+        if Game::half_halite_collected(&game.map.total_halite, &gradient_map.halite_remaining)
             && me.halite >= game.constants.ship_cost
             && !gradient_map.at_position(&me.shipyard.position).my_occupy
         {
