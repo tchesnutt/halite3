@@ -117,7 +117,7 @@ impl GradientMap {
     pub fn initialize(&mut self, game: &Game) {
         self.adjust_cells_for_adjacent_ship_entities(&game);
         self.smoothing();
-        self.adjust_for_distance(&game);
+        //self.adjust_for_distance(&game);
         self.adjust_for_bullshit_on_my_shipyard(&game);
     }
 
@@ -221,8 +221,10 @@ impl GradientMap {
 
                 let distance = dis_y + dis_x;
 
-                self.cells[y as usize][x as usize].value +=
-                    (self.height as f64 + self.width as f64 - distance as f64) / 2.0;
+                if shipyard_position.x != x && shipyard_position.y != y {
+                    self.cells[y as usize][x as usize].value +=
+                        (self.height as f64 + self.width as f64 - distance as f64) / 4.0;
+                }
             }
         }
     }

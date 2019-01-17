@@ -4,9 +4,9 @@ extern crate rand;
 
 use hlt::command::Command;
 use hlt::game::Game;
+use hlt::gradient_map::GradientMap;
 use hlt::log::Log;
 use hlt::navi::Navi;
-use hlt::gradient_map::GradientMap;
 use std::env;
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
@@ -27,7 +27,10 @@ fn main() {
     let mut game = Game::new();
     let mut navi = Navi::new(game.map.width, game.map.height);
 
-    Game::ready("mellow root v5");
+    let player_count = game.players.len();
+
+    //ignore number am bad at remembering to update version
+    Game::ready("mellow root v8");
 
     Log::log(&format!(
         "Successfully created bot! My Player ID is {}. Bot rng seed is {}.",
@@ -36,8 +39,6 @@ fn main() {
 
     loop {
         game.update_frame();
-        
-        
 
         let mut gradient_map = GradientMap::construct(&game);
         gradient_map.initialize(&game);
@@ -57,7 +58,6 @@ fn main() {
         //         value_vec
         //     ));
         // }
-
 
         let me = &game.players[game.my_id.0];
 
@@ -80,11 +80,20 @@ fn main() {
             command_queue.push(command);
         }
 
-        if Game::half_halite_collected(&game.map.total_halite, &gradient_map.halite_remaining)
-            && me.halite >= game.constants.ship_cost
-            && !gradient_map.at_position(&me.shipyard.position).my_occupy
-        {
-            command_queue.push(me.shipyard.spawn());
+        if player_count == 2 {
+            if &game.turn_number < &200
+                && me.halite >= game.constants.ship_cost
+                && !gradient_map.at_position(&me.shipyard.position).my_occupy
+            {
+                command_queue.push(me.shipyard.spawn());
+            }
+        } else {
+            if Game::half_halite_collected(&game.map.total_halite, &gradient_map.halite_remaining)
+                && me.halite >= game.constants.ship_cost
+                && !gradient_map.at_position(&me.shipyard.position).my_occupy
+            {
+                command_queue.push(me.shipyard.spawn());
+            }
         }
 
         // for row in gradient_map.cells.iter() {

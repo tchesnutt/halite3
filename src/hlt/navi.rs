@@ -90,6 +90,7 @@ impl Navi {
             return Direction::Still
         }
 
+
         for direction in Direction::get_all_cardinals() {
             let potential_position = ship.position.directional_offset(direction);
             let potential_cell = gradient_map.at_position(&potential_position);
@@ -107,6 +108,10 @@ impl Navi {
             }
         }
 
+         Log::log(&format!(
+                "Current Cell value {}",
+                current_value
+            ));
         best_direction
     }
 
@@ -122,11 +127,25 @@ impl Navi {
         let shipyard_position = game.players[game.my_id.0].shipyard.position;
         let origin_position = ship.position;
         let origin_cell = gradient_map.at_position(&origin_position);
+
+        if self.end_game[&ship.id] 
+            && shipyard_position.x == ship.position.x 
+            && shipyard_position.y == ship.position.y {
+
+            return Direction::Still;
+        }
+
         let direction_vector = self.get_direct_move(&origin_position, &shipyard_position);
+
         for direction in direction_vector {
             let potential_position = ship.position.directional_offset(direction);
             let potential_cell = gradient_map.at_position(&potential_position);
             
+            Log::log(&format!(
+                "shipid {} and direction {} sees occupy {}.",
+                ship.id.0, direction.get_char_encoding(), potential_cell.my_occupy
+            ));
+
             //needs to be general occupy
             if self.end_game[&ship.id] {
                 if potential_cell.my_occupy == false || potential_position == shipyard_position {
@@ -168,6 +187,8 @@ impl Navi {
 
         possible_moves
     }
+
+    // fn check_directions(normalized_source: &Position, normalized_destination: &Position, possible_moves: )
 
     fn is_stalled(ship: &Ship, origin_cell: &MapCell) -> bool {
         let stalled = if ship.halite < origin_cell.halite / 10 { true } else { false };
