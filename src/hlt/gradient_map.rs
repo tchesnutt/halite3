@@ -4,8 +4,10 @@ use hlt::game_map::GameMap;
 use hlt::gradient_cell::GradientCell;
 use hlt::log::Log;
 use hlt::player::Player;
+use hlt::ShipId;
 use hlt::position::Position;
 use hlt::ship::Ship;
+use std::cmp::Ordering;
 
 pub struct GradientMap {
     pub width: usize,
@@ -77,7 +79,10 @@ impl GradientMap {
         //record my ship positions
         for ship_id in &me.ship_ids {
             let position = &game.ships[ship_id].position;
-            cells[position.y as usize][position.x as usize].my_occupy = true;
+                // cells[position.y as usize][position.x as usize].my_occupy = true;
+            if position.same_position(&me.shipyard.position) {
+                // cells[position.y as usize][position.x as usize].my_occupy = true;
+            }
         }
 
         GradientMap {
@@ -107,12 +112,18 @@ impl GradientMap {
     }
 
     pub fn process_move(&mut self, old_position: &Position, direction: Direction) {
-        if direction != Direction::Still {
-            let new_position = old_position.directional_offset(direction);
-            self.at_position_mut(&old_position).my_occupy = false;
-            self.at_position_mut(&new_position).my_occupy = true;
+        let new_position = old_position.directional_offset(direction);
+        // self.at_position_mut(&old_position).my_occupy = false;
+        self.at_position_mut(&new_position).my_occupy = true;
+
+            Log::log(&format!(
+                "x {} y {} my occupy now: {}",
+                new_position.x,
+                new_position.y,
+                self.at_position_mut(&new_position).my_occupy
+            ));
         }
-    }
+    
 
     pub fn initialize(&mut self, game: &Game) {
         self.adjust_cells_for_adjacent_ship_entities(&game);
@@ -177,11 +188,11 @@ impl GradientMap {
                 for direction in Direction::get_all_cardinals() {
                     let adj_position = current_position.directional_offset(direction);
                     if x == 8 && y == 16 {
-                        Log::log(&format!(
-                            "direction {} and value {}.",
-                            direction.get_char_encoding(),
-                            self.at_position(&adj_position).value
-                        ));
+                        // Log::log(&format!(
+                        //     "direction {} and value {}.",
+                        //     direction.get_char_encoding(),
+                        //     self.at_position(&adj_position).value
+                        // ));
                     }
                     average += self.at_position(&adj_position).value;
                     if x == 8 && y == 16 {
@@ -227,5 +238,18 @@ impl GradientMap {
                 }
             }
         }
+    }
+
+    pub fn compare_value_by_ship_id(&self, i_id: &ShipId, j_id: &ShipId, game: &Game) -> Ordering {
+        let i_position = &game.ships[i_id].position;
+        let j_position = &game.ships[j_id].position;
+
+        if self.at_position(i_position).value < self.at_position(j_position).value {
+            return Ordering::Greater
+        } else if  self.at_position(i_position).value == self.at_position(j_position).value {
+            return Ordering::Equal
+        }
+
+        Ordering::Less
     }
 }
