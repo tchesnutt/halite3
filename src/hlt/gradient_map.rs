@@ -200,7 +200,7 @@ impl GradientMap {
                     }
                 }
 
-                average /= 5.0;
+                average /= 4.0;
 
                 if average == 0.0 {
                     Log::log(&format!("dis_x {} and dis_y {}.", x, y));

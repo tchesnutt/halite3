@@ -107,6 +107,26 @@ impl Navi {
         }
     }
 
+
+    fn will_time_to_home(&mut self, ship: &Ship, game: &Game, gradient_map: &GradientMap, new_position: &Position) {
+        let shipyard = &game.players[game.my_id.0].shipyard;
+        if Navi::is_stalled(ship, &game.map.at_position(&new_position))
+            || ship.position == shipyard.position
+        {
+            if let Some(x) = self.time_to_home.get_mut(&ship.id) {
+                *x = false;
+            };
+        } else {
+            if ship.halite > 900 {
+                if !self.time_to_home[&ship.id] {
+                    if let Some(x) = self.time_to_home.get_mut(&ship.id) {
+                        *x = true;
+                    };
+                }
+            }
+        }
+    }
+
     fn set_end_game(&mut self, ship: &Ship, game: &Game) {
         if self.end_game[&ship.id] == false {
             let new_bool = self.end_game(
@@ -124,67 +144,40 @@ impl Navi {
     // finds best direction, puts ship in stalled vector is necissary
     fn gather_move(&mut self, gradient_map: &GradientMap, ship: &Ship, game: &Game) -> Direction {
         let best_direction = self.determine_gather_move(gradient_map, ship, &game);
-        let best_cell = game.map.at_position(&ship.position.directional_offset(best_direction));
+        let best_position = &ship.position.directional_offset(best_direction);
+        let best_cell = game.map.at_position(best_position);
+        let shipyard = &game.players[game.my_id.0].shipyard;
 
-        if Navi::will_stall(&ship, game.map.at_position(&ship.position), &best_cell) {
-            Log::log(&format!("ship into stalled {}", ship.id.0));
+        if self.prioritize_gather_ships_for_next_turn(ship, best_position, gradient_map, game) {
+            Log::log(&format!("ship into front of command queue {}", ship.id.0));
             self.are_stalled.push(ship.id)
+        } else if self.will_end_game(&best_cell.position, &game.turn_number, &game.constants.max_turns, &shipyard.position) || ship.halite + best_cell.halite / 4 > 900 {
+            let distance = shipyard.position.distance_to(&best_cell.position, &self.width, &self.height);
+            match distance {
+            0 => self.at_dropoff.push(ship.id),
+            _ => {
+                if self.coming_home.contains_key(&distance) {
+                    if let Some(x) = self.coming_home.get_mut(&distance) {
+                        x.push(ship.id)
+                    }
+                } else {
+                    self.coming_home.insert(distance, vec![ship.id]);
+                }
+            }
         }
-
+        }
+        
         best_direction
     }
 
     fn determine_gather_move(&self, gradient_map: &GradientMap, ship: &Ship, game: &Game) -> Direction {
-        let origin_cell = &gradient_map.at_position(&ship.position);
-        let mut current_value = if origin_cell.my_occupy {
-            0.0
-        } else {
-            origin_cell.value
-        };
-
-        if Navi::is_stalled(&ship, &game.map.at_position(&ship.position)) {
-            return Direction::Still;
+        if Navi::is_stalled(ship, game.map.at_position(&ship.position)) {
+            return Direction::Still
         }
-
-        let mut possible_moves: Vec<Direction> = vec![Direction::Still];
-
-        for direction in Direction::get_all_cardinals() {
-            let potential_position = ship.position.directional_offset(direction);
-            let potential_cell = gradient_map.at_position(&potential_position);
-
-            let potential_value = Navi::evaluate_move(
-                &origin_cell.move_cost,
-                &potential_cell.value,
-                &origin_cell.collection_amt,
-            );
-
-            Log::log(&format!(
-                "shipid {} and direction {} sees calc_value {} and cell_value {} and my_occpy {} x{}y{}.",
-                ship.id.0,
-                direction.get_char_encoding(),
-                potential_value,
-                potential_cell.value,
-                potential_cell.my_occupy,
-                potential_cell.position.x,
-                potential_cell.position.y,
-                
-            ));
-
-            if direction == Direction::Still {
-                if potential_value > current_value {
-                    current_value = potential_value;
-                    possible_moves.push(direction);
-                }
-            } else {
-                if potential_value > current_value && potential_cell.my_occupy == false {
-                    current_value = potential_value;
-                    possible_moves.push(direction);
-                }
-            }
-        }
-
+        let mut possible_moves = self.get_possible_gather_move_vector(gradient_map, &ship.position, ship, false);
         possible_moves.pop().unwrap()
     }
+
 
     fn evaluate_move(move_cost: &f64, potential_cell_value: &f64, current_value: &f64) -> f64 {
         let mut weight = 0.0;
@@ -218,12 +211,6 @@ impl Navi {
             }
         }
 
-
-
-        // if shipyard.position.same_position(&new_position) {
-        //     self.at_dropoff.push(ship.id);
-        // }
-
         best_direction
     }
 
@@ -236,6 +223,9 @@ impl Navi {
         let shipyard_position = game.players[game.my_id.0].shipyard.position;
         let origin_position = ship.position;
         let origin_cell = gradient_map.at_position(&origin_position);
+        if Navi::is_stalled(ship, game.map.at_position(&ship.position)) {
+            return Direction::Still
+        }
 
         if self.end_game[&ship.id]
             && shipyard_position.x == ship.position.x
@@ -299,7 +289,7 @@ impl Navi {
             });
         }
 
-        if normalized_source.y < normalized_destination.y {
+         if normalized_source.y < normalized_destination.y {
             possible_moves.push(if dy > wrapped_dy {
                 Direction::North
             } else {
@@ -325,12 +315,79 @@ impl Navi {
         stalled
     }
 
-    fn will_stall(ship: &Ship, current_cell: &MapCell, next_cell: &MapCell) -> bool {
-        if current_cell.position.same_position(&next_cell.position) {
-            return false
+    fn prioritize_gather_ships_for_next_turn(&self, ship: &Ship, next_position: &Position, gradient_map: &GradientMap, game: &Game) -> bool {
+        if self.at_peak(gradient_map, next_position, ship) || self.will_stall(ship, game.map.at_position(&ship.position), game.map.at_position(next_position)) {
+            return true
+        }
+        false
+    }
+
+    fn at_peak(&self, gradient_map: &GradientMap, next_position: &Position, ship: &Ship) -> bool {
+        let next_possible_moves = self.get_possible_gather_move_vector(gradient_map, next_position, ship, true);
+        if next_possible_moves.len() < 2 {
+            Log::log(&format!("shipid {} is at peak", ship.id.0));
+            return true
+        }
+        false
+    }
+
+    fn get_possible_gather_move_vector(&self, gradient_map: &GradientMap, position: &Position, ship: &Ship, by_value: bool) -> Vec<Direction> {
+        let origin_cell = gradient_map.at_position(position);
+        let mut possible_moves: Vec<Direction> = vec![];
+        let mut current_value = 0.0;
+        if !origin_cell.my_occupy {
+            current_value = origin_cell.value;
+            possible_moves.push(Direction::Still);
         }
 
-        let will_stall = if ship.halite as isize - current_cell.halite as isize / 10  < next_cell.halite as isize / 10 {
+        Log::log(&format!("origincellvalue {}", origin_cell.value));
+
+        for direction in Direction::get_all_cardinals() {
+            let potential_position = position.directional_offset(direction);
+            let potential_cell = gradient_map.at_position(&potential_position);
+
+            let potential_value = Navi::evaluate_move(
+                &origin_cell.move_cost,
+                &potential_cell.value,
+                &origin_cell.collection_amt,
+            );
+
+            Log::log(&format!(
+                "shipid {} and direction {} sees calc_value {} and cell_value {} and my_occpy {} x{}y{}.",
+                ship.id.0,
+                direction.get_char_encoding(),
+                potential_value,
+                potential_cell.value,
+                potential_cell.my_occupy,
+                potential_cell.position.x,
+                potential_cell.position.y,
+                
+            ));
+            if by_value {
+                if potential_cell.value > current_value && potential_cell.my_occupy == false {
+                    current_value = potential_cell.value;
+                    possible_moves.push(direction);
+                }
+
+            } else {
+                if potential_value > current_value && potential_cell.my_occupy == false {
+                    current_value = potential_value;
+                    possible_moves.push(direction);
+                }
+            }
+        }
+        possible_moves
+    }
+
+    fn will_stall(&self, ship: &Ship, current_cell: &MapCell, next_cell: &MapCell) -> bool {
+        let mut next_turn_ship_halite: isize  = 0;
+        if current_cell.position.same_position(&next_cell.position) {
+            next_turn_ship_halite = ship.halite as isize + next_cell.halite as isize / 4;
+        } else {
+            next_turn_ship_halite = ship.halite as isize - current_cell.halite as isize / 10;
+        }
+        let will_stall = if next_turn_ship_halite  < next_cell.halite as isize / 10 {
+            Log::log(&format!("will stall next turn because " ));
             true
         } else {
             false
@@ -371,8 +428,53 @@ impl Navi {
 
             Log::log(&format!("dis_x {} and dis_y {}.", dis_x, dis_y));
 
-            if dis_y + dis_x + 10 >= turns_remaining as i32 {
-                return true;
+            if turns_remaining < 15 {
+                return true
+            }
+
+            if dis_y + dis_x + 10 > turns_remaining as i32 {
+                return true
+            }
+        };
+
+        false
+    }
+
+    fn will_end_game(
+        &self,
+        next_ship_position: &Position,
+        turn_number: &usize,
+        max_turns: &usize,
+        shipyard_position: &Position,
+    ) -> bool {
+        // refactor so only compute disties once
+        if turn_number > &300 {
+            let turns_remaining = max_turns - turn_number;
+            let mut dis_x = 0;
+            let mut dis_y = 0;
+            if (self.width as i32 - next_ship_position.x).abs()
+                < (shipyard_position.x - next_ship_position.x).abs()
+            {
+                dis_x = self.width as i32 - next_ship_position.x + shipyard_position.x;
+            } else {
+                dis_x = (shipyard_position.x - next_ship_position.x).abs();
+            };
+            if (self.height as i32 - next_ship_position.y).abs()
+                < (shipyard_position.y - next_ship_position.y).abs()
+            {
+                dis_y = self.height as i32 - next_ship_position.y + shipyard_position.y;
+            } else {
+                dis_y = (shipyard_position.y - next_ship_position.y).abs();
+            };
+
+            Log::log(&format!("dis_x {} and dis_y {} turns remaining {}.", dis_x, dis_y, turns_remaining));
+
+            if turns_remaining < 15 {
+                return true
+            }
+
+            if dis_y + dis_x + 10 > turns_remaining as i32 {
+                return true
             }
         };
 
