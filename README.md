@@ -3,6 +3,10 @@ Write up coming eventually.
 
 ## Notable Versions
 
+*v8*
+* Refactored Navigation to look one move in advance. Ships who have a move that's more important go first.
+* Anti cheese protections broke this version. Bot ends up crashing ~10% of the time.
+
 *v6*
 * Added blur function to computation of value
 * Added cell distance from drop-off function to computation of value

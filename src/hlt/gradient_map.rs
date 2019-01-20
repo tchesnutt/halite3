@@ -4,10 +4,10 @@ use hlt::game_map::GameMap;
 use hlt::gradient_cell::GradientCell;
 use hlt::log::Log;
 use hlt::player::Player;
-use hlt::ShipId;
 use hlt::position::Position;
 use hlt::ship::Ship;
-use std::cmp::Ordering;
+use hlt::ShipId;
+use std::cmp;
 
 pub struct GradientMap {
     pub width: usize,
@@ -21,6 +21,7 @@ impl GradientMap {
         let height = game.map.height;
         let width = game.map.width;
         let mut halite_remaining = 0;
+        let shipyard_pos = &game.players[game.my_id.0].shipyard.position;
 
         let mut cells: Vec<Vec<GradientCell>> = Vec::with_capacity(height);
 
@@ -42,8 +43,14 @@ impl GradientMap {
                 let surrounding_average: f64 = 0.0;
                 let my_occupy = false;
 
+                let nearest_drop_off = Position {
+                    x: shipyard_pos.x,
+                    y: shipyard_pos.y,
+                };
+
                 let cell = GradientCell {
                     position,
+                    nearest_drop_off,
                     value,
                     collection_amt,
                     surrounding_average,
@@ -106,19 +113,18 @@ impl GradientMap {
         let new_position = old_position.directional_offset(direction);
         self.at_position_mut(&new_position).my_occupy = true;
 
-            Log::log(&format!(
-                "x {} y {} my occupy now: {}",
-                new_position.x,
-                new_position.y,
-                self.at_position_mut(&new_position).my_occupy
-            ));
-        }
-    
+        Log::log(&format!(
+            "x {} y {} my occupy now: {}",
+            new_position.x,
+            new_position.y,
+            self.at_position_mut(&new_position).my_occupy
+        ));
+    }
 
     pub fn initialize(&mut self, game: &Game) {
         self.adjust_cells_for_adjacent_ship_entities(&game);
+        self.adjust_for_distance(&game);
         self.smoothing();
-        //self.adjust_for_distance(&game);
         self.adjust_for_bullshit_on_my_shipyard(&game);
     }
 
@@ -175,71 +181,102 @@ impl GradientMap {
                     y: y as i32,
                 };
 
-                for direction in Direction::get_all_cardinals() {
-                    let adj_position = current_position.directional_offset(direction);
-                    if x == 8 && y == 16 {
-                        // Log::log(&format!(
-                        //     "direction {} and value {}.",
-                        //     direction.get_char_encoding(),
-                        //     self.at_position(&adj_position).value
-                        // ));
-                    }
-                    average += self.at_position(&adj_position).value;
-                    if x == 8 && y == 16 {
-                        Log::log(&format!("average_v {}.", average));
+                for j in -2..2 as i32 {
+                    for i in -2..2 as i32 {
+                        let read = Position {
+                            x: current_position.x + i,
+                            y: current_position.y + j,
+                        };
+                        let read_normalize = self.normalize(&read);
+                        let distance = i.abs() + j.abs();
+
+                        if distance > 0 {
+                            average += self.at_position(&read_normalize).value; // / distance as f64;
+                        }
                     }
                 }
 
-                average /= 5.0;
+                // for direction in Direction::get_all_cardinals() {
+                //     let adj_position = current_position.directional_offset(direction);
 
-                if average == 0.0 {
-                    Log::log(&format!("dis_x {} and dis_y {}.", x, y));
+                //     average += self.at_position(&adj_position).value;
+
+                // }
+
+                average /= 24.0;
+                if average < 0.0 {
+                    Log::log(&format!("dis_x {} and dis_y {} average {}.", x, y, average));
                 }
 
                 self.cells[y][x].surrounding_average = average;
-                self.cells[y][x].value += average;
+            }
+        }
+
+        for y in 0..self.height {
+            for x in 0..self.width {
+                self.cells[y][x].value += self.cells[y][x].surrounding_average;
             }
         }
     }
 
     fn adjust_for_distance(&mut self, game: &Game) {
-        let shipyard_position = &game.players[game.my_id.0].shipyard.position;
-
         for y in 0..self.height as i32 {
             for x in 0..self.width as i32 {
-                let mut dis_x = 0;
-                let mut dis_y = 0;
-                if (self.width as i32 - x).abs() < (shipyard_position.x - x).abs() {
-                    dis_x = self.width as i32 - x + shipyard_position.x;
-                } else {
-                    dis_x = (shipyard_position.x - x).abs();
-                };
-                if (self.height as i32 - y).abs() < (shipyard_position.y - y).abs() {
-                    dis_y = self.height as i32 - y + shipyard_position.y;
-                } else {
-                    dis_y = (shipyard_position.y - y).abs();
-                };
+                let position = Position { x, y };
+                let nearest_drop_off = self.at_position(&position).nearest_drop_off;
+                if !position.same_position(&nearest_drop_off) {
+                    let distance =
+                        nearest_drop_off.distance_to(&position, &self.width, &self.height);
 
-                let distance = dis_y + dis_x;
+                    // let ratio = (self.width as f64 / distance as f64) * 0.5;
+                    // let new_value = self.cells[y as usize][x as usize].value * ratio;
+                    let ratio: f64 = (-(distance as f64) / 2.0).exp().max(0.0);
 
-                if shipyard_position.x != x && shipyard_position.y != y {
-                    self.cells[y as usize][x as usize].value +=
-                        (self.height as f64 + self.width as f64 - distance as f64) / 4.0;
+                    let new_value = self.cells[y as usize][x as usize].value * ratio;
+                    if y == 16 {
+                        Log::log(&format!(
+                            "x {} and y {} to dx {} dy {} distance {} ratio {} new value {}.",
+                            x,
+                            y,
+                            nearest_drop_off.x,
+                            nearest_drop_off.y,
+                            distance,
+                            ratio,
+                            new_value
+                        ));
+                    }
+                    self.cells[y as usize][x as usize].value = new_value
                 }
             }
         }
     }
 
-    pub fn compare_value_by_ship_id(&self, i_id: &ShipId, j_id: &ShipId, game: &Game) -> Ordering {
-        let i_position = &game.ships[i_id].position;
-        let j_position = &game.ships[j_id].position;
+    pub fn compare_value_by_ship_id(
+        &self,
+        i_id: &ShipId,
+        j_id: &ShipId,
+        game: &Game,
+    ) -> cmp::Ordering {
+        let mut i_value = 0.0;
+        let mut j_value = 0.0;
 
-        if self.at_position(i_position).value < self.at_position(j_position).value {
-            return Ordering::Greater
-        } else if  self.at_position(i_position).value == self.at_position(j_position).value {
-            return Ordering::Equal
+        if game.ships.contains_key(i_id) {
+            let i_position = &game.ships[i_id].position;
+            i_value = self.at_position(i_position).value;
+        }
+        if game.ships.contains_key(j_id) {
+            let j_position = &game.ships[j_id].position;
+            j_value = self.at_position(j_position).value;
         }
 
-        Ordering::Less
+        Log::log(&format!("iv {} and ij {}.", i_value, j_value));
+
+        if i_value < j_value {
+            return cmp::Ordering::Greater;
+        } else if i_value == j_value {
+            return cmp::Ordering::Equal;
+        }
+
+        cmp::Ordering::Less
     }
 }

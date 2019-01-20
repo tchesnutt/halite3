@@ -31,7 +31,7 @@ fn main() {
     let player_count = game.players.len();
 
     //ignore number am bad at remembering to update version
-    Game::ready("mellow root v9");
+    Game::ready("mellow root v10");
 
     Log::log(&format!(
         "Successfully created bot! My Player ID is {}. Bot rng seed is {}.",
