@@ -316,15 +316,29 @@ impl Navi {
     }
 
     fn prioritize_gather_ships_for_next_turn(&self, ship: &Ship, next_position: &Position, gradient_map: &GradientMap, game: &Game) -> bool {
-        if self.at_peak(gradient_map, next_position, ship) || self.will_stall(ship, game.map.at_position(&ship.position), game.map.at_position(next_position)) {
+        if self.at_peak(gradient_map, next_position, ship, game) || self.will_stall(ship, game.map.at_position(&ship.position), game.map.at_position(next_position)) {
             return true
         }
         false
     }
 
-    fn at_peak(&self, gradient_map: &GradientMap, next_position: &Position, ship: &Ship) -> bool {
+    fn next_turn_halite(&self, current_position: &Position, next_position: &Position, ship: &Ship, game: &Game) -> isize {
+        let current_cell = game.map.at_position(current_position);
+        let next_cell = game.map.at_position(next_position);
+        
+        let mut next_turn_ship_halite: isize  = 0;
+        if current_cell.position.same_position(&next_cell.position) {
+            next_turn_ship_halite = ship.halite as isize + current_cell.halite as isize / 4;
+        } else {
+            next_turn_ship_halite = ship.halite as isize - current_cell.halite as isize / 10;
+        }
+        return next_turn_ship_halite
+    }
+
+    fn at_peak(&self, gradient_map: &GradientMap, next_position: &Position, ship: &Ship, game: &Game) -> bool {
         let next_possible_moves = self.get_possible_gather_move_vector(gradient_map, next_position, ship, true);
-        if next_possible_moves.len() < 2 {
+        let next_turn_halite = self.next_turn_halite(&ship.position, next_position, ship, game);
+        if next_possible_moves.len() < 2 && next_turn_halite < 900 {
             Log::log(&format!("shipid {} is at peak", ship.id.0));
             return true
         }
@@ -334,7 +348,7 @@ impl Navi {
     fn get_possible_gather_move_vector(&self, gradient_map: &GradientMap, position: &Position, ship: &Ship, by_value: bool) -> Vec<Direction> {
         let origin_cell = gradient_map.at_position(position);
         let mut possible_moves: Vec<Direction> = vec![];
-        let mut current_value = 0.0;
+        let mut current_value = -500.0;
         if !origin_cell.my_occupy {
             current_value = origin_cell.value;
             possible_moves.push(Direction::Still);
@@ -364,7 +378,7 @@ impl Navi {
                 
             ));
             if by_value {
-                if potential_cell.value > current_value && potential_cell.my_occupy == false {
+                if potential_cell.value > current_value {
                     current_value = potential_cell.value;
                     possible_moves.push(direction);
                 }

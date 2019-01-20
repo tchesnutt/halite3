@@ -76,15 +76,6 @@ impl GradientMap {
             cells[position.y as usize][position.x as usize].my_occupy = false;
         }
 
-        //record my ship positions
-        for ship_id in &me.ship_ids {
-            let position = &game.ships[ship_id].position;
-                // cells[position.y as usize][position.x as usize].my_occupy = true;
-            if position.same_position(&me.shipyard.position) {
-                // cells[position.y as usize][position.x as usize].my_occupy = true;
-            }
-        }
-
         GradientMap {
             width,
             height,
@@ -113,7 +104,6 @@ impl GradientMap {
 
     pub fn process_move(&mut self, old_position: &Position, direction: Direction) {
         let new_position = old_position.directional_offset(direction);
-        // self.at_position_mut(&old_position).my_occupy = false;
         self.at_position_mut(&new_position).my_occupy = true;
 
             Log::log(&format!(
@@ -200,7 +190,7 @@ impl GradientMap {
                     }
                 }
 
-                average /= 4.0;
+                average /= 5.0;
 
                 if average == 0.0 {
                     Log::log(&format!("dis_x {} and dis_y {}.", x, y));
