@@ -47,8 +47,8 @@ impl Position {
         let wrapped_dx = width - dx;
         let wrapped_dy = height - dy;
 
-        distance += if wrapped_dx > dx { dx } else {wrapped_dx };
-        distance += if wrapped_dy > dx { dy } else {wrapped_dy };
+        distance += if wrapped_dx > dx { dx } else { wrapped_dx };
+        distance += if wrapped_dy > dx { dy } else { wrapped_dy };
 
         distance
     }

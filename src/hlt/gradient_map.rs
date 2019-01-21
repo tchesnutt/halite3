@@ -3,6 +3,7 @@ use hlt::game::Game;
 use hlt::game_map::GameMap;
 use hlt::gradient_cell::GradientCell;
 use hlt::log::Log;
+use hlt::navi::Navi;
 use hlt::player::Player;
 use hlt::position::Position;
 use hlt::ship::Ship;
@@ -123,13 +124,13 @@ impl GradientMap {
         ));
     }
 
-    pub fn initialize(&mut self, game: &Game) {
+    pub fn initialize(&mut self, game: &Game, navi: &Navi) {
         self.adjust_cells_for_adjacent_ship_entities(&game);
-        self.smoothing();
-        // self.trickle_smother();
-        if self.width > 48 {
-            self.adjust_for_distance(&game);
-        }
+        self.smoothing(navi);
+        // self.trickle_smother(navi);
+        // if self.width > 48 {
+        //     self.adjust_for_distance(&game);
+        // }
         self.adjust_for_bullshit_on_my_shipyard(&game);
     }
 
@@ -177,27 +178,12 @@ impl GradientMap {
     }
 
     //makes each cell value an average of the others
-    fn smoothing(&mut self) {
-        let MANHATTEN_TWO: Vec<(Position)> = vec![
-            Position { x: 2, y: 0 },
-            Position { x: 1, y: 0 },
-            Position { x: -1, y: 0 },
-            Position { x: -2, y: 0 },
-            Position { x: 1, y: 1 },
-            Position { x: 0, y: 1 },
-            Position { x: -1, y: 1 },
-            Position { x: 1, y: -1 },
-            Position { x: 0, y: -1 },
-            Position { x: -1, y: -1 },
-            Position { x: 0, y: 2 },
-            Position { x: 0, y: -2 },
-        ];
-        let MANHATTEN_ONE: Vec<(Position)> = vec![
-            Position { x: 1, y: 0 },
-            Position { x: -1, y: 0 },
-            Position { x: 0, y: 1 },
-            Position { x: 0, y: -1 },
-        ];
+    fn smoothing(&mut self, navi: &Navi) {
+        let mut rad = 2;
+        if self.width > 1 {
+            rad = 9;
+        }
+        Log::log(&format!("rad {}.", rad));
         for y in 0..self.height {
             for x in 0..self.width {
                 let mut average = self.cells[y][x].value;
@@ -206,29 +192,23 @@ impl GradientMap {
                     y: y as i32,
                 };
 
-                let mut rad = &MANHATTEN_ONE;
-                if self.width > 32 {
-                    rad = &MANHATTEN_TWO;
+                let mut divisor = 0;
+
+                for i in 1..rad {
+                    for vec in navi.manhatten_points.get(&i) {
+                        for pos in vec {
+                            let read = Position {
+                                x: current_position.x + pos.x,
+                                y: current_position.y + pos.y,
+                            };
+                            let read_normalize = self.normalize(&read);
+                            average += self.at_position(&read_normalize).value;
+                            divisor += 1;
+                        }
+                    }
                 }
 
-                for p in rad {
-                    let read = Position {
-                        x: current_position.x + p.x,
-                        y: current_position.y + p.y,
-                    };
-                    let read_normalize = self.normalize(&read);
-
-                    average += self.at_position(&read_normalize).value; // / distance as f64;
-                }
-
-                // for direction in Direction::get_all_cardinals() {
-                //     let adj_position = current_position.directional_offset(direction);
-
-                //     average += self.at_position(&adj_position).value;
-
-                // }
-
-                average /= rad.len() as f64 + 1.0;
+                average /= divisor as f64 + 1.0;
                 if average < 0.0 {
                     Log::log(&format!("dis_x {} and dis_y {} average {}.", x, y, average));
                 }
@@ -244,7 +224,7 @@ impl GradientMap {
         }
     }
 
-    fn trickle_smother(&mut self) {
+    fn trickle_smother(&mut self, navi: &Navi) {
         for y in 0..self.height {
             for x in 0..self.width {
                 let mut value = self.cells[y][x].value;
@@ -253,45 +233,45 @@ impl GradientMap {
                     y: y as i32,
                 };
 
-                let rad = (value / 10.0) as i32 + 1;
+                let mut rad = (value ).floor() as i32;
+
+                if rad == 0 || rad == 1 {
+                    rad += 1;
+                }
 
                 if y == 32 {
                     Log::log(&format!("x {} and y {} rad {} value {}.", x, y, rad, value));
                 }
 
-                for j in -rad..rad {
-                    for i in -rad..rad {
-                        let read = Position {
-                            x: current_position.x + i,
-                            y: current_position.y + j,
-                        };
-                        let read_normalize = self.normalize(&read);
-                        let distance = i.abs() + j.abs();
-
-                        if distance > 0 {
-                            self.at_position_mut(&read_normalize).surrounding_average += value;
+                for i in 1..rad {
+                    for vec in navi.manhatten_points.get(&i) {
+                        for pos in vec {
+                            let read = Position {
+                                x: current_position.x + pos.x,
+                                y: current_position.y + pos.y,
+                            };
+                            let distance = read.distance_to(&current_position, &self.width, &self.width);
+                            let read_normalize = self.normalize(&read);
+                            self.at_position_mut(&read_normalize).surrounding_average += value / distance as f64;
+                            self.at_position_mut(&read_normalize).cells_effecting += 1;
                         }
-                        self.cells[y][x].cells_effecting += 1;
                     }
                 }
-
-                self.cells[y][x].surrounding_average += value;
             }
         }
 
         for y in 0..self.height {
             for x in 0..self.width {
-                if y == 32 {
+                if y == 32 || y == 31 || y == 33 {
                     Log::log(&format!(
                         "dis_x {} and dis_y {} average {} effected {}.",
                         x,
                         y,
-                        self.cells[y][x].surrounding_average
-                            / self.cells[y][x].cells_effecting as f64,
+                        self.cells[y][x].surrounding_average,
                         self.cells[y][x].cells_effecting
                     ));
                 }
-                self.cells[y][x].value *=
+                self.cells[y][x].value +=
                     self.cells[y][x].surrounding_average / self.cells[x][y].cells_effecting as f64;
             }
         }

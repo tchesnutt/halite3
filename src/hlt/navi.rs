@@ -20,6 +20,7 @@ pub struct Navi {
     pub are_stalled: Vec<ShipId>,
     pub at_dropoff: Vec<ShipId>,
     pub coming_home: BTreeMap<usize, Vec<ShipId>>,
+    pub manhatten_points: HashMap<i32,Vec<Position>>
 }
 
 impl Navi {
@@ -30,6 +31,14 @@ impl Navi {
         let are_stalled: Vec<ShipId> = Vec::new();
         let at_dropoff: Vec<ShipId> = Vec::new();
         let coming_home: BTreeMap<usize, Vec<ShipId>> = BTreeMap::new();
+        
+        let mut manhatten_points: HashMap<i32, Vec<Position>> = HashMap::new();
+        for i in 1..10 {
+            let vec = Navi::get_manhatten_points(i);
+            manhatten_points.insert(i, vec.clone());
+            Log::log(&format!("{} = vec {}", i, vec.len()));
+
+        }
 
         Navi {
             width,
@@ -40,7 +49,36 @@ impl Navi {
             at_dropoff,
             have_moved,
             coming_home,
+            manhatten_points
         }
+    }
+
+    fn get_manhatten_points(rad: i32) -> Vec<Position> {
+        let mut point_vector = Vec::new();
+        let mut p = Position { x: 0, y: rad };
+        point_vector.push(p.clone());
+        while p.y > 0 {
+            p = Position {x: p.x - 1, y: p.y - 1};
+            point_vector.push(p.clone());
+        }
+        
+        while p.x < 0 {
+            p = Position {x: p.x + 1, y: p.y - 1};
+            point_vector.push(p.clone());
+        }
+
+        while p.y < 0 {
+            p = Position {x: p.x + 1, y: p.y + 1};
+            point_vector.push(p.clone());
+        }
+
+        while p.x > 0 {
+            p = Position {x: p.x - 1, y: p.y + 1};
+            if p.x != 0 {
+                point_vector.push(p.clone());
+            }
+        }
+        point_vector
     }
 
     pub fn update_for_new_ship(&mut self, ship_id: ShipId) {

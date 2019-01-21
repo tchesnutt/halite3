@@ -32,7 +32,7 @@ fn main() {
     let player_count = game.players.len();
 
     //ignore number am bad at remembering to update version
-    Game::ready("mellow root v10");
+    Game::ready("mellow root v13");
 
     Log::log(&format!(
         "Successfully created bot! My Player ID is {}. Bot rng seed is {}.",
@@ -44,7 +44,7 @@ fn main() {
         game.update_frame();
 
         let mut gradient_map = GradientMap::construct(&game);
-        gradient_map.initialize(&game);
+        gradient_map.initialize(&game, &navi);
 
         // for row in gradient_map.cells.iter() {
         //     let value_vec: Vec<f64> = row.iter().map(|x| x.value).collect();
