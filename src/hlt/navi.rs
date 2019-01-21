@@ -33,7 +33,7 @@ impl Navi {
         let coming_home: BTreeMap<usize, Vec<ShipId>> = BTreeMap::new();
         
         let mut manhatten_points: HashMap<i32, Vec<Position>> = HashMap::new();
-        for i in 1..10 {
+        for i in 1..32 {
             let vec = Navi::get_manhatten_points(i);
             manhatten_points.insert(i, vec.clone());
             Log::log(&format!("{} = vec {}", i, vec.len()));

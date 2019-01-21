@@ -179,47 +179,47 @@ impl GradientMap {
 
     //makes each cell value an average of the others
     fn smoothing(&mut self, navi: &Navi) {
-        let mut rad = 2;
-        if self.width > 1 {
-            rad = 9;
-        }
+        let rad = 10;
+
         Log::log(&format!("rad {}.", rad));
-        for y in 0..self.height {
-            for x in 0..self.width {
-                let mut average = self.cells[y][x].value;
-                let current_position = Position {
-                    x: x as i32,
-                    y: y as i32,
-                };
+        for _ in 1..3 {
+            for y in 0..self.height {
+                for x in 0..self.width {
+                    let mut average = self.cells[y][x].value;
+                    let current_position = Position {
+                        x: x as i32,
+                        y: y as i32,
+                    };
 
-                let mut divisor = 0;
+                    let mut divisor = 0;
 
-                for i in 1..rad {
-                    for vec in navi.manhatten_points.get(&i) {
-                        for pos in vec {
-                            let read = Position {
-                                x: current_position.x + pos.x,
-                                y: current_position.y + pos.y,
-                            };
-                            let read_normalize = self.normalize(&read);
-                            average += self.at_position(&read_normalize).value;
-                            divisor += 1;
+                    for i in 1..rad {
+                        for vec in navi.manhatten_points.get(&i) {
+                            for pos in vec {
+                                let read = Position {
+                                    x: current_position.x + pos.x,
+                                    y: current_position.y + pos.y,
+                                };
+                                let read_normalize = self.normalize(&read);
+                                average += self.at_position(&read_normalize).value;
+                                divisor += 1;
+                            }
                         }
                     }
-                }
 
-                average /= divisor as f64 + 1.0;
-                if average < 0.0 {
-                    Log::log(&format!("dis_x {} and dis_y {} average {}.", x, y, average));
-                }
+                    average /= divisor as f64 + 1.0;
+                    if average < 0.0 {
+                        Log::log(&format!("dis_x {} and dis_y {} average {}.", x, y, average));
+                    }
 
-                self.cells[y][x].surrounding_average = average;
+                    self.cells[y][x].surrounding_average = average;
+                }
             }
-        }
 
-        for y in 0..self.height {
-            for x in 0..self.width {
-                self.cells[y][x].value += self.cells[y][x].surrounding_average;
+            for y in 0..self.height {
+                for x in 0..self.width {
+                    self.cells[y][x].value += self.cells[y][x].surrounding_average;
+                }
             }
         }
     }
