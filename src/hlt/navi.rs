@@ -164,7 +164,7 @@ impl Navi {
         if self.prioritize_gather_ships_for_next_turn(ship, best_position, gradient_map, game) {
             Log::log(&format!("ship into front of command queue {}", ship.id.0));
             self.are_stalled.push(ship.id)
-        } else if self.will_end_game(&best_cell.position, &game.turn_number, &game.constants.max_turns, &shipyard.position) || ship.halite + best_cell.halite / 4 > 900 {
+        } else if self.will_end_game(&best_cell.position, &game.turn_number, &game.constants.max_turns, &shipyard.position) || self.worth_to_home(ship.halite + best_cell.halite / 4, gradient_map, &best_cell.position) {
             let distance = shipyard.position.distance_to(&best_cell.position, &self.width, &self.height);
             match distance {
                 0 => self.at_dropoff.push(ship.id),
@@ -422,7 +422,7 @@ impl Navi {
             next_turn_ship_halite = ship.halite as isize - current_cell.halite as isize / 10;
         }
         let will_stall = if next_turn_ship_halite  < next_cell.halite as isize / 10 {
-            Log::log(&format!("will stall next turn because " ));
+            Log::log(&format!("will stall next turn because HE AINT GOT SHIT LEFT!" ));
             true
         } else {
             false

@@ -9,6 +9,7 @@ use hlt::log::Log;
 use hlt::navi::Navi;
 use hlt::ShipId;
 use std::env;
+use std::time::Instant;
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
 
@@ -39,6 +40,7 @@ fn main() {
     ));
 
     loop {
+        let now = Instant::now();
         game.update_frame();
 
         let mut gradient_map = GradientMap::construct(&game);
@@ -168,5 +170,6 @@ fn main() {
         navi.end_turn();
         command_order.clear();
         Game::end_turn(&command_queue);
+        Log::log(&format!("seconds: {}", now.elapsed().as_secs() as f64 + now.elapsed().subsec_nanos() as f64 * 1e-9 ));
     }
 }

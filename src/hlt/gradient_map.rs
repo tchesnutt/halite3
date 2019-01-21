@@ -42,6 +42,7 @@ impl GradientMap {
                 let nearby_ship_count: i8 = 0;
                 let surrounding_average: f64 = 0.0;
                 let my_occupy = false;
+                let cells_effecting: i64 = 0;
 
                 let nearest_drop_off = Position {
                     x: shipyard_pos.x,
@@ -57,6 +58,7 @@ impl GradientMap {
                     move_cost,
                     my_occupy,
                     nearby_ship_count,
+                    cells_effecting,
                 };
 
                 row.push(cell);
@@ -123,8 +125,11 @@ impl GradientMap {
 
     pub fn initialize(&mut self, game: &Game) {
         self.adjust_cells_for_adjacent_ship_entities(&game);
-        self.adjust_for_distance(&game);
         self.smoothing();
+        // self.trickle_smother();
+        if self.width > 48 {
+            self.adjust_for_distance(&game);
+        }
         self.adjust_for_bullshit_on_my_shipyard(&game);
     }
 
@@ -173,6 +178,26 @@ impl GradientMap {
 
     //makes each cell value an average of the others
     fn smoothing(&mut self) {
+        let MANHATTEN_TWO: Vec<(Position)> = vec![
+            Position { x: 2, y: 0 },
+            Position { x: 1, y: 0 },
+            Position { x: -1, y: 0 },
+            Position { x: -2, y: 0 },
+            Position { x: 1, y: 1 },
+            Position { x: 0, y: 1 },
+            Position { x: -1, y: 1 },
+            Position { x: 1, y: -1 },
+            Position { x: 0, y: -1 },
+            Position { x: -1, y: -1 },
+            Position { x: 0, y: 2 },
+            Position { x: 0, y: -2 },
+        ];
+        let MANHATTEN_ONE: Vec<(Position)> = vec![
+            Position { x: 1, y: 0 },
+            Position { x: -1, y: 0 },
+            Position { x: 0, y: 1 },
+            Position { x: 0, y: -1 },
+        ];
         for y in 0..self.height {
             for x in 0..self.width {
                 let mut average = self.cells[y][x].value;
@@ -181,19 +206,19 @@ impl GradientMap {
                     y: y as i32,
                 };
 
-                for j in -2..2 as i32 {
-                    for i in -2..2 as i32 {
-                        let read = Position {
-                            x: current_position.x + i,
-                            y: current_position.y + j,
-                        };
-                        let read_normalize = self.normalize(&read);
-                        let distance = i.abs() + j.abs();
+                let mut rad = &MANHATTEN_ONE;
+                if self.width > 32 {
+                    rad = &MANHATTEN_TWO;
+                }
 
-                        if distance > 0 {
-                            average += self.at_position(&read_normalize).value; // / distance as f64;
-                        }
-                    }
+                for p in rad {
+                    let read = Position {
+                        x: current_position.x + p.x,
+                        y: current_position.y + p.y,
+                    };
+                    let read_normalize = self.normalize(&read);
+
+                    average += self.at_position(&read_normalize).value; // / distance as f64;
                 }
 
                 // for direction in Direction::get_all_cardinals() {
@@ -203,7 +228,7 @@ impl GradientMap {
 
                 // }
 
-                average /= 24.0;
+                average /= rad.len() as f64 + 1.0;
                 if average < 0.0 {
                     Log::log(&format!("dis_x {} and dis_y {} average {}.", x, y, average));
                 }
@@ -219,7 +244,62 @@ impl GradientMap {
         }
     }
 
+    fn trickle_smother(&mut self) {
+        for y in 0..self.height {
+            for x in 0..self.width {
+                let mut value = self.cells[y][x].value;
+                let current_position = Position {
+                    x: x as i32,
+                    y: y as i32,
+                };
+
+                let rad = (value / 10.0) as i32 + 1;
+
+                if y == 32 {
+                    Log::log(&format!("x {} and y {} rad {} value {}.", x, y, rad, value));
+                }
+
+                for j in -rad..rad {
+                    for i in -rad..rad {
+                        let read = Position {
+                            x: current_position.x + i,
+                            y: current_position.y + j,
+                        };
+                        let read_normalize = self.normalize(&read);
+                        let distance = i.abs() + j.abs();
+
+                        if distance > 0 {
+                            self.at_position_mut(&read_normalize).surrounding_average += value;
+                        }
+                        self.cells[y][x].cells_effecting += 1;
+                    }
+                }
+
+                self.cells[y][x].surrounding_average += value;
+            }
+        }
+
+        for y in 0..self.height {
+            for x in 0..self.width {
+                if y == 32 {
+                    Log::log(&format!(
+                        "dis_x {} and dis_y {} average {} effected {}.",
+                        x,
+                        y,
+                        self.cells[y][x].surrounding_average
+                            / self.cells[y][x].cells_effecting as f64,
+                        self.cells[y][x].cells_effecting
+                    ));
+                }
+                self.cells[y][x].value *=
+                    self.cells[y][x].surrounding_average / self.cells[x][y].cells_effecting as f64;
+            }
+        }
+    }
+
     fn adjust_for_distance(&mut self, game: &Game) {
+        let L = game.turn_number as f64 / game.constants.max_turns as f64;
+        let percent_h_r = self.halite_remaining as f64 / game.map.total_halite as f64;
         for y in 0..self.height as i32 {
             for x in 0..self.width as i32 {
                 let position = Position { x, y };
@@ -228,24 +308,28 @@ impl GradientMap {
                     let distance =
                         nearest_drop_off.distance_to(&position, &self.width, &self.height);
 
-                    // let ratio = (self.width as f64 / distance as f64) * 0.5;
-                    // let new_value = self.cells[y as usize][x as usize].value * ratio;
-                    let ratio: f64 = (-(distance as f64) / 2.0).exp().max(0.0);
+                    let ratio =
+                        (self.width as f64 / distance as f64) * ((1.0 - percent_h_r).max(0.1));
+                    // let ratio: f64 = (-(distance as f64) * ((1.0 - L).min(percent_h_r)) ).exp().max(0.0);
 
                     let new_value = self.cells[y as usize][x as usize].value * ratio;
                     if y == 16 {
                         Log::log(&format!(
-                            "x {} and y {} to dx {} dy {} distance {} ratio {} new value {}.",
+                            "x {} and y {} to dx {} dy {} distance {} L {} hr {} ratio {} new value {}.",
                             x,
                             y,
                             nearest_drop_off.x,
                             nearest_drop_off.y,
                             distance,
+                            L,
+                            percent_h_r,
                             ratio,
                             new_value
                         ));
                     }
-                    self.cells[y as usize][x as usize].value = new_value
+                    if new_value != 0.0 {
+                        self.cells[y as usize][x as usize].value = new_value
+                    }
                 }
             }
         }

@@ -8,5 +8,6 @@ pub struct GradientCell {
     pub surrounding_average: f64,
     pub move_cost: f64,
     pub my_occupy: bool,
-    pub nearby_ship_count: i8
+    pub nearby_ship_count: i8,
+    pub cells_effecting: i64,
 }
