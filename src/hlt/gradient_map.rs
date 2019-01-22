@@ -50,10 +50,6 @@ impl GradientMap {
         for id in &me.dropoff_ids {
             let pos = game.dropoffs.get(id).unwrap().position;
             dropoffs.push(pos);
-            Log::log(&format!(
-                "dropoffs {}",
-                dropoffs.len()
-            ));
         }
 
         let mut cells: Vec<Vec<GradientCell>> = Vec::with_capacity(height);
@@ -84,13 +80,18 @@ impl GradientMap {
                 let mut distance_to_dropoff = width;
                 for pos in &dropoffs {
                     let interm_d = position.distance_to(pos, &width, &height);
+                    if position.x == 61 && position.y == 39 {
+                        Log::log(&format!(
+                            "x {} y {} interm_d {} dx {} dy {}",
+                            position.x,
+                            position.y,
+                            interm_d,
+                            pos.x,
+                            pos.y,
+                        ));
+
+                    }
                     if interm_d <= distance_to_dropoff {
-                        // Log::log(&format!(
-                        //     "x {} y {} interm_d {}",
-                        //     pos.x,
-                        //     pos.y,
-                        //     interm_d
-                        // ));
                         nearest_dropoff = pos.clone();
                         distance_to_dropoff = interm_d;
                     }
@@ -119,7 +120,6 @@ impl GradientMap {
 
         //record position of enemy ships
         for player in &game.players {
-            // Log::log(&format!("heap.len {} ", self.value_max_heap.len()));
             if player.id.0 != game.my_id.0 {
                 for ship_id in &player.ship_ids {
                     let position = &game.ships[ship_id].position;
@@ -181,19 +181,21 @@ impl GradientMap {
     }
 
     pub fn initialize(&mut self, game: &Game, navi: &Navi) {
+        let max = self.height / 8 + 1;
+        let rad = self.height / 20 + 1;
         self.adjust_cells_for_adjacent_ship_entities(&game);
         self.smoothing(navi);
         // self.trickle_smother(navi);
         // if self.width > 48 {
         //     self.adjust_for_distance(&game);
         // }
-        self.find_local_maxims(navi, 1);
+        self.find_local_maxims(navi, rad as i32, max);
         self.adjust_for_bullshit_on_my_shipyard(&game);
     }
 
-    fn find_local_maxims(&mut self, navi: &Navi, rad: i32) {
+    fn find_local_maxims(&mut self, navi: &Navi, rad: i32, max: usize) {
         let mut i = 0;
-        while i < 1 {
+        while i < max {
             let cur_top = self.value_max_heap.pop().unwrap();
             let current_position = cur_top.position;
             if !self.at_position(&current_position).local_maxim {
@@ -246,7 +248,7 @@ impl GradientMap {
         // for each gradient cell increase value if nearby_ship_count is greater than 2
         for cell in self.cells.iter_mut().flatten() {
             if cell.nearby_ship_count > 1 {
-                cell.value += cell.collection_amt * 2.0;
+                cell.value += cell.collection_amt * 1.0;
             }
         }
     }

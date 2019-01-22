@@ -21,10 +21,12 @@ pub struct Navi {
     pub are_stalled: Vec<ShipId>,
     pub at_dropoff: Vec<ShipId>,
     pub coming_home: BTreeMap<usize, Vec<ShipId>>,
+    pub gathering: BTreeMap<usize, Vec<ShipId>>,
     pub manhatten_points: HashMap<i32,Vec<Position>>,
     pub halite_per_cell_per_player: f64,
     pub dropoffs: usize,
     pub min_distance_ratio_for_map: f64,
+    pub this_turn_dropoff: bool
 
 }
 
@@ -36,7 +38,9 @@ impl Navi {
         let are_stalled: Vec<ShipId> = Vec::new();
         let at_dropoff: Vec<ShipId> = Vec::new();
         let coming_home: BTreeMap<usize, Vec<ShipId>> = BTreeMap::new();
+        let gathering: BTreeMap<usize, Vec<ShipId>> = BTreeMap::new();
         let dropoffs: usize = game.players[game.my_id.0].dropoff_ids.len();
+        let this_turn_dropoff: bool = false;
         
         let mut manhatten_points: HashMap<i32, Vec<Position>> = HashMap::new();
         for i in 1..32 {
@@ -48,7 +52,7 @@ impl Navi {
 
         let halite_per_cell_per_player = game.map.total_halite as f64 / game.map.width as f64 / game.players.len() as f64;
 
-        let min_distance_ratio_for_map = match game.map.width {
+        let min_distance_ratio_for_map = match game.map.width as i32 {
             32 => 0.45,
             40 => 0.40,
             48 => 0.35,
@@ -67,17 +71,18 @@ impl Navi {
             at_dropoff,
             have_moved,
             coming_home,
+            gathering,
             manhatten_points,
             halite_per_cell_per_player,
             dropoffs,
             min_distance_ratio_for_map,
+            this_turn_dropoff,
         }
     }
 
     pub fn update_frame(&mut self, game: &Game, gradient_map: &GradientMap) {
         self.dropoffs = game.players[game.my_id.0].dropoff_ids.len();
         self.halite_per_cell_per_player = gradient_map.halite_remaining as f64 / game.map.width as f64 / game.players.len() as f64;
-
     }
 
     fn get_manhatten_points(rad: i32) -> Vec<Position> {
@@ -121,12 +126,14 @@ impl Navi {
 
     pub fn end_turn(&mut self) {
         self.have_moved.clear();
+        self.this_turn_dropoff = false;
     }
 
     pub fn clear(&mut self) {
         self.at_dropoff.clear();
         self.are_stalled.clear();
         self.coming_home.clear();
+        self.gathering.clear();
     }
     
     pub fn sort_adjacent_dropoff(mut ship_ids: Vec<ShipId>, gradient_map: &GradientMap, game: &Game) -> Vec<ShipId> {
@@ -146,9 +153,10 @@ impl Navi {
         self.set_end_game(&ship, &gradient_map, &game);
         self.set_time_to_home(&ship, &game, &gradient_map);
 
-        if gradient_map.at_position(&ship.position).local_maxim {
+        if gradient_map.at_position(&ship.position).local_maxim && !self.this_turn_dropoff {
             if self.its_convert_to_dropoff_time(ship, &gradient_map, game){
                 gradient_map.process_dropoff(&ship);
+                self.this_turn_dropoff = true;
                 return ship.make_dropoff();
             }
         }
@@ -175,7 +183,7 @@ impl Navi {
     }
 
     pub fn its_convert_to_dropoff_time(&mut self, ship: &Ship, gradient_map: &GradientMap, game: &Game) -> bool {
-        let halite_c = 1.0 - (gradient_map.halite_remaining as f64/ game.map.total_halite as f64);
+        let halite_c = 1.0 - (gradient_map.halite_remaining as f64 / game.map.total_halite as f64);
         let h_per_cell_per_player_per_dropoffs = self.halite_per_cell_per_player as f64 / (self.dropoffs + 1) as f64;
         let distance = gradient_map.at_position(&ship.position).distance_to_dropoff;
         let distance_ratio = distance as f64 / self.width as f64;
@@ -185,6 +193,7 @@ impl Navi {
             && h_per_cell_per_player_per_dropoffs > 1000.0 
             && distance_ratio > self.min_distance_ratio_for_map
             && game.players[game.my_id.0].halite + ship.halite >= 4000 {
+            Log::log(&format!("ITS HAPPENING ON x {} and y {} shipid {}", ship.position.x, ship.position.y, ship.id.0));
             return true
         }
         return false
@@ -265,10 +274,7 @@ impl Navi {
         let nearest_dropoff = gradient_map.at_position(&best_position).nearest_dropoff;
         let distance = gradient_map.at_position(&best_position).distance_to_dropoff;
 
-        if self.prioritize_gather_ships_for_next_turn(ship, best_position, gradient_map, game) {
-            Log::log(&format!("ship into front of command queue {}", ship.id.0));
-            self.are_stalled.push(ship.id)
-        } else if self.will_end_game(&best_cell.position, &game.turn_number, &game.constants.max_turns, &nearest_dropoff) || self.worth_to_home(ship.halite + best_cell.halite / 4, gradient_map, &best_cell.position) {
+        if self.will_end_game(&best_cell.position, &game.turn_number, &game.constants.max_turns, &nearest_dropoff) || self.worth_to_home(ship.halite + best_cell.halite / 4, gradient_map, &best_cell.position) {
             match distance {
                 0 => self.at_dropoff.push(ship.id),
                 _ => {
@@ -281,6 +287,8 @@ impl Navi {
                     }
                 }
             }
+        } else {
+            self.prioritize_gather_ships_for_next_turn(ship, best_position, gradient_map, game);
         }
         
         best_direction
@@ -363,10 +371,12 @@ impl Navi {
             let potential_cell = gradient_map.at_position(&potential_position);
 
             Log::log(&format!(
-                "shipid {} and direction {} sees occupy {}.",
+                "shipid {} and direction {} sees occupy {} going to x {} and y {}.",
                 ship.id.0,
                 direction.get_char_encoding(),
-                potential_cell.my_occupy
+                potential_cell.my_occupy,
+                nearest_dropoff.x,
+                nearest_dropoff.y
             ));
 
             //needs to be general occupy
@@ -436,11 +446,24 @@ impl Navi {
         stalled
     }
 
-    fn prioritize_gather_ships_for_next_turn(&self, ship: &Ship, next_position: &Position, gradient_map: &GradientMap, game: &Game) -> bool {
+    fn prioritize_gather_ships_for_next_turn(&mut self, ship: &Ship, next_position: &Position, gradient_map: &GradientMap, game: &Game) {
         if self.at_peak(gradient_map, next_position, ship, game) || self.will_stall(ship, game.map.at_position(&ship.position), game.map.at_position(next_position)) {
-            return true
+            self.are_stalled.push(ship.id);
+            Log::log(&format!("ship into front of command queue {}", ship.id.0));
+        } else {
+            let distance = gradient_map.at_position(next_position).distance_to_dropoff;
+            match distance {
+                _ => {
+                    if self.gathering.contains_key(&distance) {
+                        if let Some(x) = self.gathering.get_mut(&distance) {
+                            x.push(ship.id)
+                        }
+                    } else {
+                        self.gathering.insert(distance, vec![ship.id]);
+                    }
+                }
+            }
         }
-        false
     }
 
     fn next_turn_halite(&self, current_position: &Position, next_position: &Position, ship: &Ship, game: &Game) -> isize {
@@ -613,7 +636,7 @@ impl Navi {
                 return true
             }
 
-            if dis_y + dis_x + 10 > turns_remaining as i32 {
+            if dis_y + dis_x + 5 > turns_remaining as i32 {
                 return true
             }
         };

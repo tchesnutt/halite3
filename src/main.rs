@@ -85,14 +85,24 @@ fn main() {
             }
         }
 
+        let mut i = game.map.width;
+        while i > 0 {
+            if navi.gathering.contains_key(&i) {
+                let new_vec = navi.gathering.get_mut(&i).unwrap();
+                command_order.append(new_vec);
+            }
+            i -= 1;
+        }
+
         navi.clear();
 
         let command_log: Vec<usize> = command_order.iter().map(|x| x.0).collect();
 
         Log::log(&format!("{:?}", command_log));
+        Log::log(&format!("{}", game.constants.dropoff_cost));
 
         for ship_id in &command_order {
-            // once you fix colissions remove this like
+            // once you fix colissions remove this
             if game.ships.contains_key(ship_id) {
 
                 let ship = &game.ships[ship_id];
@@ -113,9 +123,15 @@ fn main() {
             }
         }
 
+        
+        let mut saving_for_d_off = 0;
+        if navi.this_turn_dropoff {
+            saving_for_d_off = game.constants.dropoff_cost;
+        }
+
         if player_count == 2 {
             if &game.turn_number < &200
-                && me.halite >= game.constants.ship_cost
+                && me.halite  >= game.constants.ship_cost + saving_for_d_off
                 && !gradient_map.at_position(&me.shipyard.position).my_occupy
             {
                 Log::log(&format!(
@@ -126,7 +142,7 @@ fn main() {
             }
         } else {
             if Game::half_halite_collected(&game.map.total_halite, &gradient_map.halite_remaining)
-                && me.halite >= game.constants.ship_cost
+                && me.halite >= game.constants.ship_cost + saving_for_d_off
                 && !gradient_map.at_position(&me.shipyard.position).my_occupy
             {
                 command_queue.push(me.shipyard.spawn());
