@@ -27,7 +27,7 @@ fn main() {
     };
 
     let mut game = Game::new();
-    let mut navi = Navi::new(game.map.width, game.map.height);
+    let mut navi = Navi::new(game.map.width, game.map.height, &game);
 
     let player_count = game.players.len();
 
@@ -45,6 +45,7 @@ fn main() {
 
         let mut gradient_map = GradientMap::construct(&game);
         gradient_map.initialize(&game, &navi);
+        navi.update_frame(&game, &gradient_map);
 
         // for row in gradient_map.cells.iter() {
         //     let value_vec: Vec<f64> = row.iter().map(|x| x.value).collect();
@@ -93,19 +94,10 @@ fn main() {
         for ship_id in &command_order {
             // once you fix colissions remove this like
             if game.ships.contains_key(ship_id) {
+
                 let ship = &game.ships[ship_id];
-
-                let move_direction = navi.suggest_move(&gradient_map, &ship, &game);
-                gradient_map.process_move(&ship.position, move_direction);
+                let command = navi.suggest_move(&mut gradient_map, &ship, &game);
                 navi.process_move(*ship_id);
-
-                Log::log(&format!(
-                    "ShipID {} goes {}",
-                    ship_id.0,
-                    move_direction.get_char_encoding()
-                ));
-
-                let command = ship.move_ship(move_direction);
                 command_queue.push(command);
             }
         }
@@ -115,18 +107,8 @@ fn main() {
                 navi.update_for_new_ship(*ship_id);
 
                 let ship = &game.ships[ship_id];
-
-                let move_direction = navi.suggest_move(&gradient_map, &ship, &game);
-                gradient_map.process_move(&ship.position, move_direction);
+                let command = navi.suggest_move(&mut gradient_map, &ship, &game);
                 navi.process_move(*ship_id);
-
-                Log::log(&format!(
-                    "ShipID {} goes {}",
-                    ship_id.0,
-                    move_direction.get_char_encoding()
-                ));
-
-                let command = ship.move_ship(move_direction);
                 command_queue.push(command);
             }
         }

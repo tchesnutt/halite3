@@ -8,13 +8,33 @@ use hlt::player::Player;
 use hlt::position::Position;
 use hlt::ship::Ship;
 use hlt::ShipId;
-use std::cmp;
+use std::cmp::Ordering;
+use std::collections::BinaryHeap;
+
+#[derive(Copy, Clone, Eq, PartialEq)]
+pub struct State {
+    value: isize,
+    position: Position,
+}
+
+impl Ord for State {
+    fn cmp(&self, other: &State) -> Ordering {
+        self.value.cmp(&other.value)
+    }
+}
+
+impl PartialOrd for State {
+    fn partial_cmp(&self, other: &State) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
 
 pub struct GradientMap {
     pub width: usize,
     pub height: usize,
     pub halite_remaining: usize,
     pub cells: Vec<Vec<GradientCell>>,
+    pub value_max_heap: BinaryHeap<State>,
 }
 
 impl GradientMap {
@@ -22,7 +42,19 @@ impl GradientMap {
         let height = game.map.height;
         let width = game.map.width;
         let mut halite_remaining = 0;
-        let shipyard_pos = &game.players[game.my_id.0].shipyard.position;
+        let value_max_heap = BinaryHeap::new();
+        let me = &game.players[game.my_id.0];
+        let shipyard_pos = &me.shipyard.position;
+        let mut dropoffs: Vec<Position> = vec![shipyard_pos.clone()];
+
+        for id in &me.dropoff_ids {
+            let pos = game.dropoffs.get(id).unwrap().position;
+            dropoffs.push(pos);
+            Log::log(&format!(
+                "dropoffs {}",
+                dropoffs.len()
+            ));
+        }
 
         let mut cells: Vec<Vec<GradientCell>> = Vec::with_capacity(height);
 
@@ -45,14 +77,31 @@ impl GradientMap {
                 let my_occupy = false;
                 let cells_effecting: i64 = 0;
 
-                let nearest_drop_off = Position {
+                let mut nearest_dropoff = Position {
                     x: shipyard_pos.x,
                     y: shipyard_pos.y,
                 };
+                let mut distance_to_dropoff = width;
+                for pos in &dropoffs {
+                    let interm_d = position.distance_to(pos, &width, &height);
+                    if interm_d <= distance_to_dropoff {
+                        // Log::log(&format!(
+                        //     "x {} y {} interm_d {}",
+                        //     pos.x,
+                        //     pos.y,
+                        //     interm_d
+                        // ));
+                        nearest_dropoff = pos.clone();
+                        distance_to_dropoff = interm_d;
+                    }
+                }
+
+                let local_maxim = false;
 
                 let cell = GradientCell {
                     position,
-                    nearest_drop_off,
+                    nearest_dropoff,
+                    distance_to_dropoff,
                     value,
                     collection_amt,
                     surrounding_average,
@@ -60,6 +109,7 @@ impl GradientMap {
                     my_occupy,
                     nearby_ship_count,
                     cells_effecting,
+                    local_maxim,
                 };
 
                 row.push(cell);
@@ -69,6 +119,7 @@ impl GradientMap {
 
         //record position of enemy ships
         for player in &game.players {
+            // Log::log(&format!("heap.len {} ", self.value_max_heap.len()));
             if player.id.0 != game.my_id.0 {
                 for ship_id in &player.ship_ids {
                     let position = &game.ships[ship_id].position;
@@ -91,6 +142,7 @@ impl GradientMap {
             height,
             halite_remaining,
             cells,
+            value_max_heap,
         }
     }
 
@@ -124,6 +176,10 @@ impl GradientMap {
         ));
     }
 
+    pub fn process_dropoff(&mut self, ship: &Ship) {
+        self.at_position_mut(&ship.position).my_occupy = true;
+    }
+
     pub fn initialize(&mut self, game: &Game, navi: &Navi) {
         self.adjust_cells_for_adjacent_ship_entities(&game);
         self.smoothing(navi);
@@ -131,7 +187,38 @@ impl GradientMap {
         // if self.width > 48 {
         //     self.adjust_for_distance(&game);
         // }
+        self.find_local_maxims(navi, 1);
         self.adjust_for_bullshit_on_my_shipyard(&game);
+    }
+
+    fn find_local_maxims(&mut self, navi: &Navi, rad: i32) {
+        let mut i = 0;
+        while i < 1 {
+            let cur_top = self.value_max_heap.pop().unwrap();
+            let current_position = cur_top.position;
+            if !self.at_position(&current_position).local_maxim {
+                i += 1;
+                Log::log(&format!(
+                    "max in heap {} at x {} and y {}",
+                    cur_top.value, current_position.x, current_position.y
+                ));
+                self.at_position_mut(&current_position).local_maxim = true;
+                for i in 1..rad {
+                    for vec in navi.manhatten_points.get(&i) {
+                        for pos in vec {
+                            let mark = Position {
+                                x: current_position.x + pos.x,
+                                y: current_position.y + pos.y,
+                            };
+
+                            let mark_normalize = self.normalize(&mark);
+                            self.at_position_mut(&mark_normalize).local_maxim = true;
+                        }
+                    }
+                }
+            }
+        }
+        self.value_max_heap.clear();
     }
 
     fn adjust_cells_for_adjacent_ship_entities(&mut self, game: &Game) {
@@ -218,10 +305,22 @@ impl GradientMap {
 
             for y in 0..self.height {
                 for x in 0..self.width {
-                    self.cells[y][x].value += self.cells[y][x].surrounding_average;
+                    let new_value = self.cells[y][x].value + self.cells[y][x].surrounding_average;
+                    self.cells[y][x].value = new_value;
+                    // Log::log(&format!("dis_x {} and dis_y {} average {}.", x, y, new_value));
+                    self.generate_value_max_heap(x as i32, y as i32, new_value);
                 }
             }
         }
+    }
+
+    fn generate_value_max_heap(&mut self, x: i32, y: i32, value: f64) {
+        let new_state = State {
+            value: value as isize,
+            position: Position { x, y },
+        };
+
+        self.value_max_heap.push(new_state);
     }
 
     fn trickle_smother(&mut self, navi: &Navi) {
@@ -233,7 +332,7 @@ impl GradientMap {
                     y: y as i32,
                 };
 
-                let mut rad = (value ).floor() as i32;
+                let mut rad = (value).floor() as i32;
 
                 if rad == 0 || rad == 1 {
                     rad += 1;
@@ -250,9 +349,11 @@ impl GradientMap {
                                 x: current_position.x + pos.x,
                                 y: current_position.y + pos.y,
                             };
-                            let distance = read.distance_to(&current_position, &self.width, &self.width);
+                            let distance =
+                                read.distance_to(&current_position, &self.width, &self.width);
                             let read_normalize = self.normalize(&read);
-                            self.at_position_mut(&read_normalize).surrounding_average += value / distance as f64;
+                            self.at_position_mut(&read_normalize).surrounding_average +=
+                                value / distance as f64;
                             self.at_position_mut(&read_normalize).cells_effecting += 1;
                         }
                     }
@@ -283,7 +384,7 @@ impl GradientMap {
         for y in 0..self.height as i32 {
             for x in 0..self.width as i32 {
                 let position = Position { x, y };
-                let nearest_drop_off = self.at_position(&position).nearest_drop_off;
+                let nearest_drop_off = self.at_position(&position).nearest_dropoff;
                 if !position.same_position(&nearest_drop_off) {
                     let distance =
                         nearest_drop_off.distance_to(&position, &self.width, &self.height);
@@ -315,12 +416,7 @@ impl GradientMap {
         }
     }
 
-    pub fn compare_value_by_ship_id(
-        &self,
-        i_id: &ShipId,
-        j_id: &ShipId,
-        game: &Game,
-    ) -> cmp::Ordering {
+    pub fn compare_value_by_ship_id(&self, i_id: &ShipId, j_id: &ShipId, game: &Game) -> Ordering {
         let mut i_value = 0.0;
         let mut j_value = 0.0;
 
@@ -336,11 +432,11 @@ impl GradientMap {
         Log::log(&format!("iv {} and ij {}.", i_value, j_value));
 
         if i_value < j_value {
-            return cmp::Ordering::Greater;
+            return Ordering::Greater;
         } else if i_value == j_value {
-            return cmp::Ordering::Equal;
+            return Ordering::Equal;
         }
 
-        cmp::Ordering::Less
+        Ordering::Less
     }
 }
