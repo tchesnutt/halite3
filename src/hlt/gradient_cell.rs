@@ -10,6 +10,8 @@ pub struct GradientCell {
     pub move_cost: f64,
     pub my_occupy: bool,
     pub nearby_ship_count: i8,
+    pub my_ship_count: i8,
     pub cells_effecting: i64,
-    pub local_maxim: bool
+    pub local_maxim: bool,
+    pub enemy_predicted_halite: isize,
 }

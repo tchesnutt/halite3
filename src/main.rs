@@ -32,7 +32,7 @@ fn main() {
     let player_count = game.players.len();
 
     //ignore number am bad at remembering to update version
-    Game::ready("mellow root v15");
+    Game::ready("mellow root v20");
 
     Log::log(&format!(
         "Successfully created bot! My Player ID is {}. Bot rng seed is {}.",
@@ -129,10 +129,15 @@ fn main() {
             saving_for_d_off = game.constants.dropoff_cost;
         }
 
+        let mut production = 2000;
+        if command_queue.len() > 0 {
+            production = game.map.total_halite / game.players.len() / command_queue.len();
+        }
+
         if player_count == 2 {
-            if &game.turn_number < &200
-                && me.halite  >= game.constants.ship_cost + saving_for_d_off
+            if me.halite  >= game.constants.ship_cost + saving_for_d_off
                 && !gradient_map.at_position(&me.shipyard.position).my_occupy
+                && (game.ships.len() - me.ship_ids.len() + 1 > me.ship_ids.len() && game.constants.max_turns - game.turn_number > 100) 
             {
                 Log::log(&format!(
                     "shipyard occpied? {}",
@@ -141,9 +146,10 @@ fn main() {
                 command_queue.push(me.shipyard.spawn());
             }
         } else {
-            if Game::half_halite_collected(&game.map.total_halite, &gradient_map.halite_remaining)
+            if (production > 1500 || Game::half_halite_collected(&game.map.total_halite, &gradient_map.halite_remaining))
                 && me.halite >= game.constants.ship_cost + saving_for_d_off
                 && !gradient_map.at_position(&me.shipyard.position).my_occupy
+                && game.constants.max_turns - game.turn_number > 200 
             {
                 command_queue.push(me.shipyard.spawn());
             }

@@ -153,8 +153,8 @@ impl Navi {
         self.set_end_game(&ship, &gradient_map, &game);
         self.set_time_to_home(&ship, &game, &gradient_map);
 
-        if gradient_map.at_position(&ship.position).local_maxim && !self.this_turn_dropoff {
-            if self.its_convert_to_dropoff_time(ship, &gradient_map, game){
+        if !self.this_turn_dropoff {
+            if self.its_convert_to_dropoff_time(ship, &gradient_map, game) && gradient_map.at_position(&ship.position).local_maxim{
                 gradient_map.process_dropoff(&ship);
                 self.this_turn_dropoff = true;
                 return ship.make_dropoff();
@@ -186,13 +186,17 @@ impl Navi {
         let halite_c = 1.0 - (gradient_map.halite_remaining as f64 / game.map.total_halite as f64);
         let h_per_cell_per_player_per_dropoffs = self.halite_per_cell_per_player as f64 / (self.dropoffs + 1) as f64;
         let distance = gradient_map.at_position(&ship.position).distance_to_dropoff;
+        let myships = gradient_map.at_position(&ship.position).my_ship_count;
+        let their = gradient_map.at_position(&ship.position).nearby_ship_count;
         let distance_ratio = distance as f64 / self.width as f64;
         
         Log::log(&format!("halite_c {}, hpcpcpd {}, distance_ratio {}", halite_c, h_per_cell_per_player_per_dropoffs, distance_ratio));
         if halite_c < 0.65
             && h_per_cell_per_player_per_dropoffs > 1000.0 
             && distance_ratio > self.min_distance_ratio_for_map
-            && game.players[game.my_id.0].halite + ship.halite >= 4000 {
+            && game.players[game.my_id.0].halite + ship.halite >= 4000
+            && myships >= their
+            && self.dropoffs < game.players[game.my_id.0].ship_ids.len() / 10 {
             Log::log(&format!("ITS HAPPENING ON x {} and y {} shipid {}", ship.position.x, ship.position.y, ship.id.0));
             return true
         }
@@ -294,11 +298,15 @@ impl Navi {
         best_direction
     }
 
-    fn determine_gather_move(&self, gradient_map: &GradientMap, ship: &Ship, game: &Game) -> Direction {
+    pub fn determine_gather_move(&self, gradient_map: &GradientMap, ship: &Ship, game: &Game) -> Direction {
+        let mut me_more = false;
+        if game.ships.len() / (game.players.len() as usize) < game.players[game.my_id.0].ship_ids.len() {
+            me_more = true;
+        }
         if Navi::is_stalled(ship, game.map.at_position(&ship.position)) {
             return Direction::Still
         }
-        let mut possible_moves = self.get_possible_gather_move_vector(gradient_map, &ship.position, ship, false);
+        let mut possible_moves = self.get_possible_gather_move_vector(gradient_map, &ship.position, ship, false, me_more);
         if possible_moves.len() > 0 {
             return  possible_moves.pop().unwrap()
         }
@@ -466,7 +474,7 @@ impl Navi {
         }
     }
 
-    fn next_turn_halite(&self, current_position: &Position, next_position: &Position, ship: &Ship, game: &Game) -> isize {
+    pub fn next_turn_halite(&self, current_position: &Position, next_position: &Position, ship: &Ship, game: &Game) -> isize {
         let current_cell = game.map.at_position(current_position);
         let next_cell = game.map.at_position(next_position);
         
@@ -480,7 +488,14 @@ impl Navi {
     }
 
     fn at_peak(&self, gradient_map: &GradientMap, next_position: &Position, ship: &Ship, game: &Game) -> bool {
-        let next_possible_moves = self.get_possible_gather_move_vector(gradient_map, next_position, ship, true);
+        let mut me_more = false;
+        
+        if game.ships.len() > 20 {
+            if game.ships.len() as isize / (game.players.len() as isize) < (game.players[game.my_id.0].ship_ids.len() as isize) {
+                me_more = true;
+            }
+        }
+        let next_possible_moves = self.get_possible_gather_move_vector(gradient_map, next_position, ship, true, me_more);
         let next_turn_halite = self.next_turn_halite(&ship.position, next_position, ship, game);
         if next_possible_moves.len() < 2 && self.worth_to_home(next_turn_halite as usize, gradient_map, &next_position) {
             Log::log(&format!("shipid {} is at peak", ship.id.0));
@@ -489,7 +504,7 @@ impl Navi {
         false
     }
 
-    fn get_possible_gather_move_vector(&self, gradient_map: &GradientMap, position: &Position, ship: &Ship, for_next_turn: bool) -> Vec<Direction> {
+    pub fn get_possible_gather_move_vector(&self, gradient_map: &GradientMap, position: &Position, ship: &Ship, for_next_turn: bool, me_more: bool) -> Vec<Direction> {
         let origin_cell = gradient_map.at_position(position);
         let mut possible_moves: Vec<Direction> = vec![];
         let mut current_value = -500.0;
@@ -531,12 +546,18 @@ impl Navi {
                     current_value = potential_cell.value;
                     possible_moves.push(direction);
                 }
-
             } else {
-                if potential_value > current_value && potential_cell.my_occupy == false {
-                    current_value = potential_value;
-                    possible_moves.push(direction);
+                if potential_value > current_value {
+                    if  (me_more && potential_cell.enemy_predicted_halite as usize > ship.halite * 2) || potential_cell.my_occupy == false {
+                        current_value = potential_value;
+                        possible_moves.push(direction);
+                        
+                    }
                 }
+                // if potential_value > current_value && potential_cell.my_occupy == false {
+                //     current_value = potential_value;
+                //     possible_moves.push(direction);
+                // }
             }
         }
         possible_moves
