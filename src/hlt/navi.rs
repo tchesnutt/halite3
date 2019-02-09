@@ -1,10 +1,7 @@
 use hlt::direction::Direction;
 use hlt::game::Game;
-use hlt::game_map::GameMap;
-use hlt::gradient_cell::GradientCell;
 use hlt::command::Command;
 use hlt::gradient_map::GradientMap;
-use hlt::log::Log;
 use hlt::map_cell::MapCell;
 use hlt::position::Position;
 use hlt::ship::Ship;
@@ -46,8 +43,6 @@ impl Navi {
         for i in 1..32 {
             let vec = Navi::get_manhatten_points(i);
             manhatten_points.insert(i, vec.clone());
-            Log::log(&format!("{} = vec {}", i, vec.len()));
-
         }
 
         let halite_per_cell_per_player = game.map.total_halite as f64 / game.map.width as f64 / game.players.len() as f64;
@@ -60,7 +55,6 @@ impl Navi {
             64 => 0.25,
             _ => 0.10,
         };
-        Log::log(&format!("min_dist_ratio_for_map {}", min_distance_ratio_for_map));
 
         Navi {
             width,
@@ -164,20 +158,10 @@ impl Navi {
         if self.time_to_home[&ship.id] || self.end_game[&ship.id] {
             let direction = self.drop_off_move(&gradient_map, &ship, &game);
             gradient_map.process_move(&ship.position, direction);
-            Log::log(&format!(
-                "ShipID {} goes {}",
-                ship.id.0,
-                direction.get_char_encoding()
-            ));
             return ship.move_ship(direction);
         } else {
             let direction = self.gather_move(&gradient_map, &ship, &game);
             gradient_map.process_move(&ship.position, direction);
-            Log::log(&format!(
-                "ShipID {} goes {}",
-                ship.id.0,
-                direction.get_char_encoding()
-            ));
             return ship.move_ship(direction);
         }
     }
@@ -190,14 +174,12 @@ impl Navi {
         let their = gradient_map.at_position(&ship.position).nearby_ship_count;
         let distance_ratio = distance as f64 / self.width as f64;
         
-        Log::log(&format!("halite_c {}, hpcpcpd {}, distance_ratio {}", halite_c, h_per_cell_per_player_per_dropoffs, distance_ratio));
         if halite_c < 0.65
             && h_per_cell_per_player_per_dropoffs > 1000.0 
             && distance_ratio > self.min_distance_ratio_for_map
             && game.players[game.my_id.0].halite + ship.halite >= 4000
             && myships >= their
             && self.dropoffs < game.players[game.my_id.0].ship_ids.len() / 10 {
-            Log::log(&format!("ITS HAPPENING ON x {} and y {} shipid {}", ship.position.x, ship.position.y, ship.id.0));
             return true
         }
         return false
@@ -327,14 +309,6 @@ impl Navi {
         let new_position = &ship.position.directional_offset(best_direction);
         let best_cell = gradient_map.at_position(new_position);
         let distance = best_cell.distance_to_dropoff;
-        
-
-        Log::log(&format!("ShipId {} new distance {} to x {} y {}",
-            ship.id.0,
-            distance,
-            best_cell.nearest_dropoff.x,
-            best_cell.nearest_dropoff.y
-        ));
 
         match distance {
             0 => self.at_dropoff.push(ship.id),
@@ -377,15 +351,6 @@ impl Navi {
         for direction in direction_vector {
             let potential_position = ship.position.directional_offset(direction);
             let potential_cell = gradient_map.at_position(&potential_position);
-
-            Log::log(&format!(
-                "shipid {} and direction {} sees occupy {} going to x {} and y {}.",
-                ship.id.0,
-                direction.get_char_encoding(),
-                potential_cell.my_occupy,
-                nearest_dropoff.x,
-                nearest_dropoff.y
-            ));
 
             //needs to be general occupy
             if self.end_game[&ship.id] {
@@ -457,7 +422,6 @@ impl Navi {
     fn prioritize_gather_ships_for_next_turn(&mut self, ship: &Ship, next_position: &Position, gradient_map: &GradientMap, game: &Game) {
         if self.at_peak(gradient_map, next_position, ship, game) || self.will_stall(ship, game.map.at_position(&ship.position), game.map.at_position(next_position)) {
             self.are_stalled.push(ship.id);
-            Log::log(&format!("ship into front of command queue {}", ship.id.0));
         } else {
             let distance = gradient_map.at_position(next_position).distance_to_dropoff;
             match distance {
@@ -498,7 +462,6 @@ impl Navi {
         let next_possible_moves = self.get_possible_gather_move_vector(gradient_map, next_position, ship, true, me_more);
         let next_turn_halite = self.next_turn_halite(&ship.position, next_position, ship, game);
         if next_possible_moves.len() < 2 && self.worth_to_home(next_turn_halite as usize, gradient_map, &next_position) {
-            Log::log(&format!("shipid {} is at peak", ship.id.0));
             return true
         }
         false
@@ -518,8 +481,6 @@ impl Navi {
             possible_moves.push(Direction::Still);
         }
 
-        Log::log(&format!("origincellvalue {}", origin_cell.value));
-
         for direction in Direction::get_all_cardinals() {
             let potential_position = position.directional_offset(direction);
             let potential_cell = gradient_map.at_position(&potential_position);
@@ -530,17 +491,6 @@ impl Navi {
                 &origin_cell.collection_amt,
             );
 
-            Log::log(&format!(
-                "shipid {} and direction {} sees calc_value {} and cell_value {} and my_occpy {} x{}y{}.",
-                ship.id.0,
-                direction.get_char_encoding(),
-                potential_value,
-                potential_cell.value,
-                potential_cell.my_occupy,
-                potential_cell.position.x,
-                potential_cell.position.y,
-                
-            ));
             if for_next_turn {
                 if potential_cell.value > current_value {
                     current_value = potential_cell.value;
@@ -571,7 +521,6 @@ impl Navi {
             next_turn_ship_halite = ship.halite as isize - current_cell.halite as isize / 10;
         }
         let will_stall = if next_turn_ship_halite  < next_cell.halite as isize / 10 {
-            Log::log(&format!("will stall next turn because HE AINT GOT SHIT LEFT!" ));
             true
         } else {
             false
@@ -609,8 +558,6 @@ impl Navi {
             } else {
                 dis_y = (nearest_dropoff.y - ship_position.y).abs();
             };
-
-            Log::log(&format!("dis_x {} and dis_y {}.", dis_x, dis_y));
 
             if turns_remaining < 15 {
                 return true
@@ -650,8 +597,6 @@ impl Navi {
             } else {
                 dis_y = (nearest_dropoff.y - next_ship_position.y).abs();
             };
-
-            Log::log(&format!("dis_x {} and dis_y {} turns remaining {}.", dis_x, dis_y, turns_remaining));
 
             if turns_remaining < 15 {
                 return true

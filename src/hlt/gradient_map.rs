@@ -1,10 +1,7 @@
 use hlt::direction::Direction;
 use hlt::game::Game;
-use hlt::game_map::GameMap;
 use hlt::gradient_cell::GradientCell;
-use hlt::log::Log;
 use hlt::navi::Navi;
-use hlt::player::Player;
 use hlt::position::Position;
 use hlt::ship::Ship;
 use hlt::ShipId;
@@ -82,17 +79,6 @@ impl GradientMap {
                 let mut distance_to_dropoff = width;
                 for pos in &dropoffs {
                     let interm_d = position.distance_to(pos, &width, &height);
-                    if position.x == 61 && position.y == 39 {
-                        Log::log(&format!(
-                            "x {} y {} interm_d {} dx {} dy {}",
-                            position.x,
-                            position.y,
-                            interm_d,
-                            pos.x,
-                            pos.y,
-                        ));
-
-                    }
                     if interm_d <= distance_to_dropoff {
                         nearest_dropoff = pos.clone();
                         distance_to_dropoff = interm_d;
@@ -171,13 +157,6 @@ impl GradientMap {
     pub fn process_move(&mut self, old_position: &Position, direction: Direction) {
         let new_position = old_position.directional_offset(direction);
         self.at_position_mut(&new_position).my_occupy = true;
-
-        Log::log(&format!(
-            "x {} y {} my occupy now: {}",
-            new_position.x,
-            new_position.y,
-            self.at_position_mut(&new_position).my_occupy
-        ));
     }
 
     pub fn process_dropoff(&mut self, ship: &Ship) {
@@ -190,20 +169,12 @@ impl GradientMap {
         self.adjust_cells_for_adjacent_ship_entities(&game);
         self.predict_enemy_movement(game, navi);
         self.smoothing(navi);
-        // self.trickle_smother(navi);
-        // if self.width > 48 {
-        //     self.adjust_for_distance(&game);
-        // }
         self.find_local_maxims(navi, rad as i32, max);
         self.adjust_for_bullshit_on_my_shipyard(&game);
     }
 
     fn find_local_maxims(&mut self, navi: &Navi, rad: i32, max: usize) {
         let mut i = 0;
-                Log::log(&format!(
-                    "value heap {}",
-                    self.value_max_heap.len(), 
-                ));
 
         while i < max {
             if self.value_max_heap.len() > 0  {
@@ -211,10 +182,6 @@ impl GradientMap {
                 let current_position = cur_top.position;
                 if !self.at_position(&current_position).local_maxim && (self.at_position(&current_position).my_ship_count > 0 ) {
                     i += 1;
-                    Log::log(&format!(
-                        "max in heap {} at x {} and y {}",
-                        cur_top.value, current_position.x, current_position.y
-                    ));
                     self.at_position_mut(&current_position).local_maxim = true;
                     for i in 1..rad {
                         for vec in navi.manhatten_points.get(&i) {
@@ -323,7 +290,6 @@ impl GradientMap {
     fn smoothing(&mut self, navi: &Navi) {
         let rad = self.width / 8 + 2;
 
-        Log::log(&format!("rad {}.", rad));
         for _ in 1..3 {
             for y in 0..self.height {
                 for x in 0..self.width {
@@ -350,10 +316,6 @@ impl GradientMap {
                     }
 
                     average /= divisor as f64 + 1.0;
-                    if average < 0.0 {
-                        Log::log(&format!("dis_x {} and dis_y {} average {}.", x, y, average));
-                    }
-
                     self.cells[y][x].surrounding_average = average;
                 }
             }
@@ -362,7 +324,6 @@ impl GradientMap {
                 for x in 0..self.width {
                     let new_value = self.cells[y][x].value + self.cells[y][x].surrounding_average;
                     self.cells[y][x].value = new_value;
-                    // Log::log(&format!("dis_x {} and dis_y {} average {}.", x, y, new_value));
                     self.generate_value_max_heap(x as i32, y as i32, new_value);
                 }
             }
@@ -393,10 +354,6 @@ impl GradientMap {
                     rad += 1;
                 }
 
-                if y == 32 {
-                    Log::log(&format!("x {} and y {} rad {} value {}.", x, y, rad, value));
-                }
-
                 for i in 1..rad {
                     for vec in navi.manhatten_points.get(&i) {
                         for pos in vec {
@@ -418,15 +375,6 @@ impl GradientMap {
 
         for y in 0..self.height {
             for x in 0..self.width {
-                if y == 32 || y == 31 || y == 33 {
-                    Log::log(&format!(
-                        "dis_x {} and dis_y {} average {} effected {}.",
-                        x,
-                        y,
-                        self.cells[y][x].surrounding_average,
-                        self.cells[y][x].cells_effecting
-                    ));
-                }
                 self.cells[y][x].value +=
                     self.cells[y][x].surrounding_average / self.cells[x][y].cells_effecting as f64;
             }
@@ -443,26 +391,9 @@ impl GradientMap {
                 if !position.same_position(&nearest_drop_off) {
                     let distance =
                         nearest_drop_off.distance_to(&position, &self.width, &self.height);
-
                     let ratio =
                         (self.width as f64 / distance as f64) * ((1.0 - percent_h_r).max(0.1));
-                    // let ratio: f64 = (-(distance as f64) * ((1.0 - L).min(percent_h_r)) ).exp().max(0.0);
-
                     let new_value = self.cells[y as usize][x as usize].value * ratio;
-                    if y == 16 {
-                        Log::log(&format!(
-                            "x {} and y {} to dx {} dy {} distance {} L {} hr {} ratio {} new value {}.",
-                            x,
-                            y,
-                            nearest_drop_off.x,
-                            nearest_drop_off.y,
-                            distance,
-                            L,
-                            percent_h_r,
-                            ratio,
-                            new_value
-                        ));
-                    }
                     if new_value != 0.0 {
                         self.cells[y as usize][x as usize].value = new_value
                     }
@@ -483,8 +414,6 @@ impl GradientMap {
             let j_position = &game.ships[j_id].position;
             j_value = self.at_position(j_position).value;
         }
-
-        Log::log(&format!("iv {} and ij {}.", i_value, j_value));
 
         if i_value < j_value {
             return Ordering::Greater;
